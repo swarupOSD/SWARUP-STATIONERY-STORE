@@ -42,12 +42,14 @@ export function Home() {
   const { t, lang, setLang } = useLang();
   const [data, setData] = useState<any>(null);
   const [dash, setDash] = useState<any>(null);
+  const [pricingCt, setPricingCt] = useState(0);
   const [err, setErr] = useState('');
   const nav = useNavigate();
   const user = JSON.parse(localStorage.getItem('user') || '{}');
   useEffect(() => {
     api.get('/api/reports/today').then((r) => setData(r.data)).catch((e) => setErr(errMsg(e)));
     api.get('/api/dashboard').then((r) => setDash(r.data)).catch(() => {});
+    api.get('/api/products', { params: { needsPricing: '1', limit: 1 } }).then((r) => setPricingCt(r.data.total)).catch(() => {});
   }, []);
   const hour = new Date().toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit' });
   return (
@@ -93,8 +95,15 @@ export function Home() {
       <div className="section-t">⚠️ Needs attention</div>
       {!dash ? <Skel n={2} /> : (
         <>
-          {(dash.lowItems || []).length === 0 && (dash.topDue || []).length === 0 && (
+          {(dash.lowItems || []).length === 0 && (dash.topDue || []).length === 0 && pricingCt === 0 && (
             <div className="card" style={{ borderLeft: '4px solid var(--green)' }}>✅ All good — no low stock, no pending dues.</div>
+          )}
+          {pricingCt > 0 && (
+            <div className="alert-row" style={{ borderLeftColor: 'var(--blue)', cursor: 'pointer' }} onClick={() => nav('/products?needsPricing=1')}>
+              <span style={{ fontSize: 22 }}>🏷️</span>
+              <div className="grow"><b>{pricingCt} new products need sell prices</b><br /><small>Added from bills — set prices to sell at profit</small></div>
+              <button className="btn sm gold">Set</button>
+            </div>
           )}
           {(dash.lowItems || []).slice(0, 5).map((p: any) => (
             <div key={p._id} className="alert-row red">

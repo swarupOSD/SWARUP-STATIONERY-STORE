@@ -17,6 +17,8 @@ export function Purchase() {
   const [billFile, setBillFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [history, setHistory] = useState<any[]>([]);
+  const [detailId, setDetailId] = useState<string | null>(null);
+  const openDetail = (id: string) => setDetailId(id);
   const find = async (term: string) => {
     setQ(term);
     try { const { data } = await api.get('/api/products', { params: { q: term, limit: 15 } }); setProducts(data.items); } catch {}
@@ -80,14 +82,43 @@ export function Purchase() {
       </div>
       <div className="section-t">🧾 Recent purchases</div>
       {history.map((h: any) => (
-        <div key={h._id} className="lrow">
-          <span style={{ fontSize: 22 }}>🧾</span>
+        <div key={h._id} className="lrow" style={{ cursor: 'pointer' }} onClick={() => openDetail(h._id)}>
+          <span style={{ fontSize: 22 }}>{h.source === 'Flipkart' ? '🛍️' : '🧾'}</span>
           <div className="grow"><b className="t">{h.invoiceNumber} • {h.supplier || h.source}</b><small>{h.purchaseDate} • {h.items.length} items{h.status === 'VOIDED' ? ' • VOIDED' : ''}</small></div>
           <b>{rs(h.grandTotal)}</b>
-          {h.status !== 'VOIDED' && <button className="btn sm ghost" onClick={() => voidOne(h._id, h.invoiceNumber)}>Void</button>}
         </div>
       ))}
+      {detailId && <PurchaseDetail id={detailId} onClose={() => { setDetailId(null); loadHist(); }} onVoid={voidOne} />}
     </div>
+  );
+}
+
+function PurchaseDetail({ id, onClose, onVoid }: { id: string; onClose: () => void; onVoid: (id: string, inv: string) => void }) {
+  const [p, setP] = useState<any>(null);
+  useEffect(() => { api.get(`/api/purchases/${id}`).then((r) => setP(r.data)).catch(() => {}); }, [id]);
+  if (!p) return <Sheet title="Purchase" onClose={onClose}><Skel n={3} /></Sheet>;
+  return (
+    <Sheet title={`${p.invoiceNumber}`} onClose={onClose} wide>
+      <div className="kv"><span>Supplier</span><b>{p.supplier || '—'} ({p.source})</b></div>
+      {p.orderNumber && <div className="kv"><span>Order</span><span>{p.orderNumber}</span></div>}
+      <div className="kv"><span>Date</span><span>{p.purchaseDate} {p.purchaseTime}</span></div>
+      <div className="kv"><span>By</span><span>{p.createdBy}</span></div>
+      <div className="table-wrap" style={{ marginTop: 8 }}><table><thead><tr><th>Item</th><th>Qty</th><th>Buy ₹</th><th>Total</th></tr></thead>
+        <tbody>{p.items.map((it: any, i: number) => <tr key={i}><td>{it.name}</td><td>{it.qty}</td><td>{rs(it.unitPrice)}</td><td>{rs(it.lineTotal)}</td></tr>)}</tbody>
+      </table></div>
+      <div className="totals" style={{ marginTop: 8 }}>
+        <div className="tr"><span>Subtotal</span><span>{rs(p.subtotal)}</span></div>
+        {!!p.tax && <div className="tr"><span>Tax</span><span>{rs(p.tax)}</span></div>}
+        {!!p.shipping && <div className="tr"><span>Shipping</span><span>{rs(p.shipping)}</span></div>}
+        {!!p.discount && <div className="tr"><span>Discount</span><span>− {rs(p.discount)}</span></div>}
+        <div className="tr grand"><span>Grand total</span><span>{rs(p.grandTotal)}</span></div>
+        <div className="tr"><span>Paid / Due</span><span>{rs(p.paid)} / {rs(p.due)}</span></div>
+      </div>
+      <div className="btnrow" style={{ marginTop: 10 }}>
+        {p.billUrl && <a className="btn gold" href={p.billUrl} target="_blank" rel="noreferrer">🧾 View bill</a>}
+        {p.status !== 'VOIDED' ? <button className="btn" onClick={() => { onClose(); onVoid(p._id, p.invoiceNumber); }}>Void</button> : <span className="badge-out">VOIDED</span>}
+      </div>
+    </Sheet>
   );
 }
 

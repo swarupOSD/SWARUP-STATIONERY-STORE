@@ -83,6 +83,14 @@ router.get('/', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+router.get('/:id', async (req, res, next) => {
+  try {
+    const doc = await Purchase.findById(req.params.id);
+    if (!doc) return res.status(404).json({ error: 'Purchase not found.' });
+    res.json(doc);
+  } catch (e) { next(e); }
+});
+
 router.post('/:id/void', requirePerm('purchases.void'), async (req, res, next) => {
   try {
     const doc = await Purchase.findById(req.params.id);

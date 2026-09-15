@@ -48,6 +48,7 @@ const SettingsSchema = new mongoose.Schema({
   theme: { type: String, enum: ['puja','light','dark'], default: 'puja' },
   pujaMode: { type: Boolean, default: true },
   staffPermissions: { type: mongoose.Schema.Types.Mixed, default: {} },
+  defaultMarginPct: { type: Number, default: 0, min: 0, max: 200 },
 }, { timestamps: true });
 
 const DailyClosingSchema = new mongoose.Schema({
@@ -94,6 +95,8 @@ const InvoiceImportSchema = new mongoose.Schema({
   fileUrl: { type: String, default: '' },
   filePublicId: { type: String, default: '' },
   rawText: { type: String, default: '' },
+  docType: { type: String, enum: ['flipkart', 'generic'], default: 'generic' },
+  parseNotes: { type: [String], default: [] },
 }, { timestamps: true });
 
 const PersonalPurchaseSchema = new mongoose.Schema({

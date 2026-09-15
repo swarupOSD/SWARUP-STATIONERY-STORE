@@ -31,11 +31,12 @@ router.post('/preview-image', async (req, res, next) => {
 
 router.get('/', async (req, res, next) => {
   try {
-    const { q = '', category = '', low, out, active = 'true', page = '1', limit = '50' } = req.query;
+    const { q = '', category = '', low, out, needsPricing, active = 'true', page = '1', limit = '50' } = req.query;
     const filter = {};
     if (active === 'true') filter.active = true;
     else if (active === 'false') filter.active = false;
     if (category) filter.category = category;
+    if (needsPricing === '1') filter.needsPricing = true;
     if (q) {
       const rx = new RegExp(String(q).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
       filter.$or = [{ name: rx }, { nameBn: rx }, { sku: rx }, { barcode: rx }, { qrCode: rx }, { brand: rx }, { aliases: rx }];
@@ -102,7 +103,7 @@ router.patch('/:id', requirePerm('products.update'), async (req, res, next) => {
     const p = await Product.findById(req.params.id);
     if (!p) return res.status(404).json({ error: 'Product not found.' });
     const oldPP = p.purchasePrice, oldSP = p.sellingPrice, oldStock = p.stock;
-    const editable = ['name','nameBn','aliases','category','subcategory','imageUrl','imagePublicId','productLink','sku','barcode','qrCode','purchasePrice','sellingPrice','minStock','unit','packSize','supplier','brand','tax','discount','notes','active'];
+    const editable = ['name','nameBn','aliases','category','subcategory','imageUrl','imagePublicId','productLink','sku','barcode','qrCode','purchasePrice','sellingPrice','minStock','unit','packSize','supplier','brand','tax','discount','notes','needsPricing','active'];
     for (const k of editable) if (req.body[k] !== undefined) p[k] = req.body[k];
     // stock changes go through adjust endpoint; ignore direct stock here unless admin adjustment flag
     await p.save();

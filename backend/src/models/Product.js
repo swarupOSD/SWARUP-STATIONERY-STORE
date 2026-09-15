@@ -25,6 +25,7 @@ const ProductSchema = new mongoose.Schema({
   tax: { type: Number, default: 0, min: 0 },
   discount: { type: Number, default: 0, min: 0 },
   notes: { type: String, default: '' },
+  needsPricing: { type: Boolean, default: false, index: true },
   active: { type: Boolean, default: true, index: true },
 }, { timestamps: true });
 

@@ -8,17 +8,19 @@ export function Products() {
   const dq = useDebounce(q);
   const [cat, setCat] = useState('');
   const [cats, setCats] = useState<any[]>([]);
-  const [filter, setFilter] = useState<'all' | 'low' | 'out'>('all');
+  const [filter, setFilter] = useState<'all' | 'low' | 'out' | 'pricing'>('all');
   const [sort, setSort] = useState('name');
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [detail, setDetail] = useState<any>(null);
 
   useEffect(() => { api.get('/api/categories').then((r) => setCats(r.data)).catch(() => {}); }, []);
+  const qp = new URLSearchParams(location.search).get('needsPricing');
+  useEffect(() => { if (qp === '1') setFilter('pricing'); }, []);
   const load = async () => {
     setLoading(true);
     try {
-      const { data } = await api.get('/api/products', { params: { q: dq, category: cat, limit: 120 } });
+      const { data } = await api.get('/api/products', { params: { q: dq, category: cat, limit: 120, ...(filter === 'pricing' ? { needsPricing: '1' } : {}) } });
       let list = data.items;
       if (filter === 'low') list = list.filter((p: any) => p.stock > 0 && p.stock <= (p.minStock ?? 5));
       if (filter === 'out') list = list.filter((p: any) => p.stock <= 0);
@@ -44,6 +46,7 @@ export function Products() {
         {cats.map((c) => <button key={c._id} className={`chip${cat === c.name ? ' on' : ''}`} onClick={() => setCat(cat === c.name ? '' : c.name)}>{c.name}</button>)}
         <button className={`chip${filter === 'low' ? ' on' : ''}`} onClick={() => setFilter(filter === 'low' ? 'all' : 'low')}>⚠️ Low</button>
         <button className={`chip${filter === 'out' ? ' on' : ''}`} onClick={() => setFilter(filter === 'out' ? 'all' : 'out')}>🚫 Out</button>
+        <button className={`chip${filter === 'pricing' ? ' on' : ''}`} onClick={() => setFilter(filter === 'pricing' ? 'all' : 'pricing')}>🏷️ Set price</button>
       </div>
       <p style={{ color: 'var(--muted)', fontSize: 13 }}>{items.length} products • stock value ≈ {rs(Math.round(stockVal))}</p>
       {loading ? <Skel n={4} /> : items.length === 0 ? <Empty emoji="📦" title="No products" sub="Add your first product to start selling." action={<a className="btn primary" href="/products/new">+ Add product</a>} /> : (
@@ -54,7 +57,7 @@ export function Products() {
               <div className="p">
                 <span className="nm">{p.name}</span>
                 <span className="pr"><b>{rs(p.sellingPrice)}</b><span className="margin-tag">+{margin(p)}%</span></span>
-                <span className="pr"><span>stk {p.stock} {p.unit}</span>{p.stock <= 0 ? <span className="badge-out">OUT</span> : p.stock <= (p.minStock ?? 5) ? <span className="badge-low">LOW</span> : <span className="badge-ok">OK</span>}</span>
+                <span className="pr"><span>stk {p.stock} {p.unit}</span>{p.needsPricing ? <span className="badge-info">SET PRICE</span> : p.stock <= 0 ? <span className="badge-out">OUT</span> : p.stock <= (p.minStock ?? 5) ? <span className="badge-low">LOW</span> : <span className="badge-ok">OK</span>}</span>
               </div>
             </div>
           ))}
@@ -71,6 +74,7 @@ function ProductDetail({ p, onClose }: { p: any; onClose: () => void }) {
   const [hist, setHist] = useState<any>(null);
   const [delta, setDelta] = useState('');
   const [reason, setReason] = useState('');
+  const [newPrice, setNewPrice] = useState('');
   useEffect(() => { api.get(`/api/products/${p._id}/history`).then((r) => setHist(r.data)).catch(() => {}); }, [p._id]);
   const adjust = async () => {
     const d = Number(delta);
@@ -94,6 +98,20 @@ function ProductDetail({ p, onClose }: { p: any; onClose: () => void }) {
       {p.brand && <div className="kv"><span>Brand</span><span>{p.brand}</span></div>}
       {(p.sku || p.barcode) && <div className="kv"><span>SKU / Barcode</span><span>{p.sku || p.barcode}</span></div>}
       {p.supplier && <div className="kv"><span>Supplier</span><span>{p.supplier}</span></div>}
+
+      {p.needsPricing && (
+        <div className="card" style={{ marginTop: 8, borderLeft: '4px solid var(--blue)', background: '#fff' }}>
+          <b>🏷️ Set your sell price</b> <small>(cost {rs(p.purchasePrice)})</small>
+          <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+            <input placeholder="Sell ₹" value={newPrice} onChange={(e) => setNewPrice(e.target.value)} inputMode="decimal" />
+            <button className="btn primary" onClick={async () => {
+              if (!(Number(newPrice) > 0)) { toast('Enter sell price', 'err'); return; }
+              try { await api.patch(`/api/products/${p._id}`, { sellingPrice: Number(newPrice), needsPricing: false }); toast('Price set ✓', 'ok'); onClose(); }
+              catch (e: any) { toast(errMsg(e), 'err'); }
+            }}>Set</button>
+          </div>
+        </div>
+      )}
 
       <div className="section-t">⚖️ Adjust stock</div>
       <div style={{ display: 'flex', gap: 8 }}>

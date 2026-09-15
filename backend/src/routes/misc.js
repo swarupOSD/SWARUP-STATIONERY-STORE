@@ -60,7 +60,7 @@ router.patch('/settings', auth, requireRole('ADMIN'), async (req, res, next) => 
   try {
     let s = await Settings.findOne({ key: 'shop' });
     if (!s) s = await Settings.create({ key: 'shop' });
-    const allowed = ['shopName','shopNameBn','address','phone','gst','upiId','upiName','qrImageUrl','qrPublicId','logoUrl','logoPublicId','receiptFooter','taxEnabled','negativeStockAllowed','lowStockThreshold','language','theme','pujaMode','staffPermissions'];
+    const allowed = ['shopName','shopNameBn','address','phone','gst','upiId','upiName','qrImageUrl','qrPublicId','logoUrl','logoPublicId','receiptFooter','taxEnabled','negativeStockAllowed','lowStockThreshold','defaultMarginPct','language','theme','pujaMode','staffPermissions'];
     for (const k of allowed) if (req.body[k] !== undefined) s[k] = req.body[k];
     await s.save();
     await audit(req.user, 'SETTINGS_CHANGED', 'settings', s._id, { keys: Object.keys(req.body) });

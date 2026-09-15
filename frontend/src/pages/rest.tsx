@@ -90,56 +90,101 @@ export function Invoices() {
   const [result, setResult] = useState<any>(null);
   const [busy, setBusy] = useState(false);
   const [list, setList] = useState<any[]>([]);
+  const [addStock, setAddStock] = useState(true);
+  const [done, setDone] = useState<any>(null);
+  const [meta, setMeta] = useState({ supplier: '', invoiceNumber: '', orderNumber: '', invoiceDate: '' });
   useEffect(() => { api.get('/api/invoices').then((r) => setList(r.data)).catch(() => {}); }, []);
   const upload = async () => {
-    if (!file) { toast('Choose a bill file first', 'err'); return; }
-    setBusy(true);
+    if (!file) { toast('Choose the Flipkart PDF first', 'err'); return; }
+    setBusy(true); setDone(null);
     const fd = new FormData(); fd.append('bill', file); fd.append('rawText', rawText);
-    try { const { data } = await api.post('/api/invoices/upload', fd); setResult(data); }
-    catch (e: any) { toast(errMsg(e), 'err'); } finally { setBusy(false); }
+    try {
+      const { data } = await api.post('/api/invoices/upload', fd);
+      setResult(data);
+      setMeta({ supplier: data.import.supplier || '', invoiceNumber: data.import.invoiceNumber || '', orderNumber: data.import.orderNumber || '', invoiceDate: data.import.invoiceDate || '' });
+      if (data.docType === 'flipkart') toast(`Flipkart bill read: ${data.import.items.length} items ✓`, 'ok');
+    } catch (e: any) { toast(e?.response?.data?.hint || errMsg(e), 'err'); } finally { setBusy(false); }
   };
   const editLine = (i: number, k: string, v: string) => {
-    setResult((r: any) => ({ ...r, import: { ...r.import, items: r.import.items.map((it: any, j: number) => j === i ? { ...it, [k]: Number(v) } : it) } }));
+    setResult((r: any) => ({ ...r, import: { ...r.import, items: r.import.items.map((it: any, j: number) => j === i ? { ...it, [k]: k === 'name' ? v : Number(v) } : it) } }));
   };
+  const fk = result?.docType === 'flipkart';
+  const matchedCt = result?.matches?.filter((m: any) => m.status === 'matched').length || 0;
+  const newCt = (result?.matches?.length || 0) - matchedCt;
+  const stockUnits = result?.import.items.reduce((s: number, it: any) => s + Number(it.qty || 0), 0) || 0;
   const commit = async () => {
     try {
-      await api.post(`/api/invoices/${result.import._id}/commit`, { items: result.import.items, addToStock: true, confirmDuplicate: !!result.duplicateWarning });
-      toast('Purchase saved ✓', 'ok'); location.reload();
+      const { data } = await api.post(`/api/invoices/${result.import._id}/commit`, {
+        items: result.import.items, addToStock: addStock, confirmDuplicate: !!result.duplicateWarning,
+        ...meta, source: fk ? 'Flipkart' : undefined,
+      });
+      setDone(data); setResult(null); setFile(null); setRawText('');
+      api.get('/api/invoices').then((r) => setList(r.data)).catch(() => {});
     } catch (e: any) { toast(errMsg(e), 'err'); }
   };
   return (
     <div className="page">
-      <PageHead title="Invoice import" emoji="🧾" />
-      <div className="card">
-        <div className="kv"><span>1. Upload</span><span>→ 2. Review</span></div>
-        <div className="kv"><span>3. Correct</span><span>→ 4. Confirm & save</span></div>
-        <p><small style={{ color: 'var(--muted)' }}>Nothing is saved or stocked until you confirm. Uncertain lines stay unmatched for you to map.</small></p>
-        <label>Bill file (PDF / photo)</label><input type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.heic" capture="environment" onChange={(e) => setFile(e.target.files?.[0] || null)} />
-        <label>Bill text (optional — improves extraction)</label>
-        <textarea rows={3} value={rawText} onChange={(e) => setRawText(e.target.value)} placeholder="Supplier … Pen 10 x 8 = 80 …" />
-        <button className="btn primary block" style={{ marginTop: 10 }} onClick={upload} disabled={busy}>{busy ? 'Reading…' : '🔍 Read bill'}</button>
+      <PageHead title="Add Flipkart bill" emoji="📦" />
+      <div className="card" style={{ borderLeft: '4px solid var(--gold)' }}>
+        <b>Flipkart → Shop in one tap</b>
+        <p style={{ color: 'var(--muted)', fontSize: 13.5, margin: '4px 0 0' }}>1. Download the invoice PDF from Flipkart &nbsp;→&nbsp; 2. Upload here &nbsp;→&nbsp; 3. Review once &nbsp;→&nbsp; 4. Confirm — every product gets added with stock.</p>
+        <label>Flipkart invoice PDF *</label><input type="file" accept=".pdf" onChange={(e) => setFile(e.target.files?.[0] || null)} />
+        {file && <small>📄 {file.name} ({Math.round(file.size / 1024)} KB)</small>}
+        <details style={{ marginTop: 8 }}><summary style={{ fontSize: 13.5, color: 'var(--muted)' }}>Photo bill or unclear PDF? Add bill text (optional)</summary>
+          <textarea rows={3} value={rawText} onChange={(e) => setRawText(e.target.value)} placeholder="Paste bill text…" style={{ marginTop: 6 }} />
+        </details>
+        <button className="btn primary block" style={{ marginTop: 10 }} onClick={upload} disabled={busy}>{busy ? '📖 Reading PDF…' : '🔍 Read bill'}</button>
       </div>
       {result && (
-        <div className="card" style={{ marginTop: 10, borderLeft: '4px solid var(--gold)' }}>
+        <div className="card" style={{ marginTop: 10, borderLeft: `4px solid ${fk ? '#175cd3' : 'var(--gold)'}` }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <b style={{ flex: 1 }}>{fk ? '🛍️ Flipkart invoice detected' : '🧾 Bill read'}</b>
+            {fk && <span className="badge-info">auto product adder</span>}
+          </div>
           {result.mathIssues?.length > 0 && <p style={{ color: 'var(--rose-tx)' }}>⚠ Bill total mismatch: {result.mathIssues.join('; ')}. Correct below before saving.</p>}
           {result.duplicateWarning && <p style={{ color: 'var(--rose-tx)' }}>⛔ This invoice may already have been added.</p>}
-          <div className="kv"><span>Supplier</span><b>{result.import.supplier || '—'}</b></div>
-          <div className="kv"><span>Invoice</span><b>{result.import.invoiceNumber || '—'} • {rs(result.import.grandTotal)}</b></div>
-          <small style={{ color: 'var(--muted)' }}>Source: {result.source}. Tap qty/rate to correct.</small>
-          <div className="table-wrap" style={{ marginTop: 8 }}><table><thead><tr><th>Product</th><th>Qty</th><th>Rate</th><th>Total</th><th>Match</th></tr></thead>
+          {(result.parseNotes || []).map((n: string, i: number) => <p key={i} style={{ color: 'var(--amber-tx)' }}><small>ℹ {n}</small></p>)}
+          <div className="row2">
+            <div><label>Supplier</label><input value={meta.supplier} onChange={(e) => setMeta({ ...meta, supplier: e.target.value })} /></div>
+            <div><label>Invoice no.</label><input value={meta.invoiceNumber} onChange={(e) => setMeta({ ...meta, invoiceNumber: e.target.value })} /></div>
+          </div>
+          <div className="row2">
+            <div><label>Order ID</label><input value={meta.orderNumber} onChange={(e) => setMeta({ ...meta, orderNumber: e.target.value })} /></div>
+            <div><label>Bill date</label><input type="date" value={meta.invoiceDate} onChange={(e) => setMeta({ ...meta, invoiceDate: e.target.value })} /></div>
+          </div>
+          <div className="kv"><span>Items</span><b>{result.import.items.length} • <span style={{ color: 'var(--green)' }}>{matchedCt} in shop</span> • <span style={{ color: 'var(--blue)' }}>{newCt} new</span></b></div>
+          <div className="kv"><span>Bill total</span><b>{rs(result.import.grandTotal)}</b></div>
+          <small style={{ color: 'var(--muted)' }}>Tap a name/qty/rate to correct. New products get a smart category + your default margin; you set final prices after.</small>
+          <div className="table-wrap" style={{ marginTop: 8 }}><table><thead><tr><th>Product</th><th>Qty</th><th>Rate</th><th>Total</th><th>Status</th></tr></thead>
             <tbody>{result.import.items.map((it: any, i: number) => (
-              <tr key={i}><td>{it.name}</td>
-                <td><input type="number" value={it.qty} style={{ width: 64, minHeight: 36 }} onChange={(e) => editLine(i, 'qty', e.target.value)} /></td>
+              <tr key={i}><td><input value={it.name} style={{ minWidth: 140, minHeight: 36 }} onChange={(e) => editLine(i, 'name', e.target.value)} /></td>
+                <td><input type="number" value={it.qty} style={{ width: 62, minHeight: 36 }} onChange={(e) => editLine(i, 'qty', e.target.value)} /></td>
                 <td><input type="number" value={it.unitPrice} style={{ width: 76, minHeight: 36 }} onChange={(e) => editLine(i, 'unitPrice', e.target.value)} /></td>
                 <td>{rs(it.qty * it.unitPrice)}</td>
-                <td>{result.matches?.[i]?.status === 'matched' ? <span className="badge-ok">✓</span> : <span className="badge-low">review</span>}</td>
+                <td>{result.matches?.[i]?.status === 'matched' ? <span className="badge-ok" title={result.matches[i].matchedName}>✓ in shop</span> : <span className="badge-info">＋ new</span>}</td>
               </tr>))}</tbody>
           </table></div>
-          <button className="btn primary block" style={{ marginTop: 10 }} onClick={commit}>✓ Review OK — confirm & save</button>
+          <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}><input type="checkbox" checked={addStock} onChange={(e) => setAddStock(e.target.checked)} style={{ width: 22 }} /> Add all to shop stock <b>(+{stockUnits} units)</b></label>
+          <button className="btn primary block" style={{ marginTop: 10 }} onClick={commit}>✓ Confirm — add {newCt} new + stock {matchedCt} matched</button>
         </div>
       )}
+      {done && (
+        <Sheet title="Bill added ✓" onClose={() => setDone(null)}>
+          <div className="card kpi green"><small>🎉 {done.message}</small></div>
+          {done.created?.length > 0 && (<><div className="section-t">＋ New products ({done.created.length})</div>
+            {done.created.map((c: any) => <div key={c.productId} className="kv"><span>{c.name} <small>• {c.category}</small></span><b>{rs(c.sellingPrice)}</b></div>)}</>)}
+          {done.matched?.length > 0 && (<><div className="section-t">✓ Matched ({done.matched.length})</div>
+            {done.matched.slice(0, 8).map((c: any, i: number) => <div key={i} className="kv"><span>{c.name}</span><small>stock updated</small></div>)}
+            {done.matched.length > 8 && <small>…and {done.matched.length - 8} more</small>}</>)}
+          {done.needsPricing > 0 && <a className="btn gold block" style={{ marginTop: 10 }} href="/products?needsPricing=1">🏷️ Set sell prices ({done.needsPricing})</a>}
+          <div className="btnrow" style={{ marginTop: 10 }}>
+            <a className="btn" href="/purchase">View purchase</a>
+            <button className="btn primary" onClick={() => setDone(null)}>Done</button>
+          </div>
+        </Sheet>
+      )}
       <div className="section-t">Past imports</div>
-      {list.map((l: any) => <div key={l._id} className="lrow"><span style={{ fontSize: 20 }}>🧾</span><div className="grow"><b className="t">{l.supplier || '—'} • {l.invoiceNumber || '—'}</b><small>{rs(l.grandTotal)} • {l.status}</small></div></div>)}
+      {list.map((l: any) => <div key={l._id} className="lrow"><span style={{ fontSize: 20 }}>{l.docType === 'flipkart' ? '🛍️' : '🧾'}</span><div className="grow"><b className="t">{l.supplier || '—'} • {l.invoiceNumber || l.orderNumber || '—'}</b><small>{rs(l.grandTotal)} • {l.status}</small></div></div>)}
     </div>
   );
 }

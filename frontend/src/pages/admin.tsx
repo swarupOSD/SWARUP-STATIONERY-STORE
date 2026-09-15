@@ -61,6 +61,8 @@ export function SettingsPage() {
         <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}><input type="checkbox" checked={!!s.taxEnabled} onChange={(e) => set('taxEnabled', e.target.checked)} style={{ width: 22 }} /> Enable tax field</label>
         <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}><input type="checkbox" checked={!!s.negativeStockAllowed} onChange={(e) => set('negativeStockAllowed', e.target.checked)} style={{ width: 22 }} /> Allow negative stock (else blocked)</label>
         <label>Low-stock alert level</label><input type="number" value={s.lowStockThreshold ?? 5} onChange={(e) => set('lowStockThreshold', Number(e.target.value))} />
+        <label>Default margin % for bill-added products</label><input type="number" value={s.defaultMarginPct ?? 0} onChange={(e) => set('defaultMarginPct', Number(e.target.value))} />
+        <small style={{ color: 'var(--muted)' }}>New products from Flipkart bills get sell price = buy × (1 + margin%). You still review each price after.</small>
         <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}><input type="checkbox" checked={!!s.pujaMode} onChange={(e) => set('pujaMode', e.target.checked)} style={{ width: 22 }} /> 🪔 Puja Mode festive theme</label>
         <button className="btn primary block" style={{ marginTop: 12 }} onClick={save}>✓ Save all settings</button>
       </div>
