@@ -1,9 +1,9 @@
 import { Component, createContext, useCallback, useContext, useEffect, useRef, useState, ReactNode } from 'react';
 
 /* ---------- error boundary: never a silent white screen ---------- */
-export class ErrorBoundary extends Component<{ children: ReactNode }, { msg: string }> {
-  state = { msg: '' };
-  static getDerivedStateFromError(e: any) { return { msg: String(e?.message || e) }; }
+export class ErrorBoundary extends Component<{ children: ReactNode }, { msg: string; stack: string }> {
+  state = { msg: '', stack: '' };
+  static getDerivedStateFromError(e: any) { return { msg: String(e?.message || e), stack: String(e?.stack || '') }; }
   componentDidCatch() { /* visible fallback below is the UX */ }
   render() {
     if (!this.state.msg) return this.props.children;
@@ -12,10 +12,12 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { msg: str
         <div className="card" style={{ borderLeft: '4px solid var(--rose-tx)' }}>
           <h3>😕 Something didn't load</h3>
           <p style={{ fontSize: 13, wordBreak: 'break-word' }}>{this.state.msg}</p>
-          <div style={{ display: 'flex', gap: 8 }}>
+          {this.state.stack && <details><summary style={{ fontSize: 12, cursor: 'pointer' }}>Technical detail</summary><pre style={{ fontSize: 11, whiteSpace: 'pre-wrap' }}>{this.state.stack.slice(0, 800)}</pre></details>}
+          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
             <button className="btn primary" style={{ flex: 1 }} onClick={() => location.reload()}>↻ Reload</button>
-            <button className="btn" style={{ flex: 1 }} onClick={() => { localStorage.clear(); location.href = '/login'; }}>Logout & retry</button>
+            <button className="btn" style={{ flex: 1 }} onClick={() => { try { navigator.clipboard.writeText(this.state.msg + '\n' + this.state.stack); alert('Copied — send it to support'); } catch { alert(this.state.msg); } }}>📋 Copy error</button>
           </div>
+          <button className="btn ghost sm block" style={{ marginTop: 8 }} onClick={() => { localStorage.clear(); location.href = '/login'; }}>Logout & retry</button>
         </div>
       </div>
     );
@@ -25,7 +27,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, { msg: str
 /* ---------- formatting ---------- */
 export const rs = (n: any) => `₹${Number(n ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 export const num = (n: any) => Number(n ?? 0).toLocaleString('en-IN');
-export const initials = (s = '') => s.trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '?';
+export const initials = (s: any = '') => String(s ?? '').trim().split(/\s+/).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '?';
 export const waLink = (phone: string, text: string) => {
   const p = (phone || '').replace(/\D/g, '');
   return `https://wa.me/${p ? '91' + p.slice(-10) : ''}?text=${encodeURIComponent(text)}`;
@@ -34,6 +36,19 @@ export function useDebounce<T>(v: T, ms = 300) {
   const [d, setD] = useState(v);
   useEffect(() => { const t = setTimeout(() => setD(v), ms); return () => clearTimeout(t); }, [v, ms]);
   return d;
+}
+
+/* ---------- safe local storage (a poisoned value must never white-screen) ---------- */
+export function getJSON<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw === null || raw === undefined) return fallback;
+    const v = JSON.parse(raw);
+    return v === undefined ? fallback : (v as T);
+  } catch {
+    try { localStorage.removeItem(key); } catch {}
+    return fallback;
+  }
 }
 
 /* ---------- clock ---------- */

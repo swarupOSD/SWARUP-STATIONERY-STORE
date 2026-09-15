@@ -203,21 +203,21 @@ export function CustomerDetail({ id }: { id: string }) {
         <div className="card kpi"><small>🛒 Bought</small><br /><b>{rs(c.totalPurchased)}</b></div>
         <div className="card kpi green"><small>💰 Paid</small><br /><b>{rs(c.totalPaid)}</b></div>
         <div className="card kpi red"><small>📒 Due</small><br /><b>{rs(c.totalDue)}</b></div>
-        <div className="card kpi accent"><small>🧾 Bills</small><br /><b>{d.sales.length}</b></div>
+        <div className="card kpi accent"><small>🧾 Bills</small><br /><b>{(d.sales || []).length}</b></div>
       </div>
       <div className="btnrow">
         <button className="btn primary big" onClick={() => setShowPay(true)}>💰 Receive payment</button>
         <a className="btn gold" href={`/api/customers/${id}/statement.pdf`} target="_blank" rel="noreferrer">📄 Statement PDF</a>
       </div>
       <div style={{ marginTop: 10 }}><Seg value={tab} onChange={setTab} options={[{ v: 'all', label: 'All' }, { v: 'dues', label: 'Dues' }, { v: 'payments', label: 'Payments' }]} /></div>
-      {(tab === 'all' || tab === 'dues') && d.sales.map((s: any) => (
+      {(tab === 'all' || tab === 'dues') && (d.sales || []).map((s: any) => (
         <div key={s._id} className="lrow">
           <span style={{ fontSize: 22 }}>🧾</span>
-          <div className="grow"><b className="t">{s.receiptNumber} • {s.transactionDate} {s.transactionTime}</b><small>{s.items.map((i: any) => `${i.name}×${i.qty}`).join(', ')}</small></div>
+          <div className="grow"><b className="t">{s.receiptNumber} • {s.transactionDate} {s.transactionTime}</b><small>{(s.items || []).map((i: any) => `${i.name}×${i.qty}`).join(', ')}</small></div>
           <div style={{ textAlign: 'right' }}><b>{rs(s.total)}</b>{s.due > 0 ? <div><span className="badge-out">due {rs(s.due)}</span></div> : <div><span className="badge-ok">paid</span></div>}</div>
         </div>
       ))}
-      {(tab === 'all' || tab === 'payments') && d.payments.map((p: any) => (
+      {(tab === 'all' || tab === 'payments') && (d.payments || []).map((p: any) => (
         <div key={p._id} className="lrow">
           <span style={{ fontSize: 22 }}>💰</span>
           <div className="grow"><b className="t">{rs(p.amount)} via {p.method}</b><small>{p.paymentDate} {p.paymentTime}{p.reference ? ` • ${p.reference}` : ''}</small></div>

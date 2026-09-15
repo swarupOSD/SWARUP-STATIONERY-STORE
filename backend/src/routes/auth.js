@@ -14,9 +14,9 @@ router.post('/login', body('username').notEmpty(), body('password').notEmpty(), 
     if (!errors.isEmpty()) return res.status(400).json({ error: 'Enter username and password.' });
     const { username, password } = req.body;
     const user = await User.findOne({ username: String(username).toLowerCase().trim() });
-    if (!user || !user.active) return res.status(401).json({ error: 'Invalid username or password.' });
-    const ok = await bcrypt.compare(String(password), user.passwordHash);
-    if (!ok) return res.status(401).json({ error: 'Invalid username or password.' });
+    if (!user || !user.active) return res.status(401).json({ error: 'Invalid username or password. Check spelling and extra spaces.' });
+    const ok = await bcrypt.compare(String(password).trim(), user.passwordHash);
+    if (!ok) return res.status(401).json({ error: 'Invalid username or password. Check spelling and extra spaces.' });
     await audit(user, 'LOGIN', 'user', user._id, {});
     res.json({ token: signToken(user), user: { id: user._id, username: user.username, name: user.name, role: user.role, permissions: user.permissions } });
   } catch (e) { next(e); }

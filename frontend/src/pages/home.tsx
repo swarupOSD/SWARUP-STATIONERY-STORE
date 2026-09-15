@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api, { errMsg } from '../api/client';
 import { useLang } from '../i18n/lang';
-import { Avatar, Clock, Empty, PageHead, Skel, Stat, greeting, rs } from '../components/ui';
+import { Avatar, Clock, Empty, PageHead, Skel, Stat, getJSON, greeting, rs } from '../components/ui';
 
 export function Login() {
   const [username, setUsername] = useState('');
@@ -13,7 +13,7 @@ export function Login() {
   const submit = async (e: any) => {
     e.preventDefault(); setErr(''); setBusy(true);
     try {
-      const { data } = await api.post('/api/auth/login', { username, password });
+      const { data } = await api.post('/api/auth/login', { username: username.trim(), password: password.trim() });
       localStorage.setItem('token', data.token);
       localStorage.setItem('user', JSON.stringify(data.user));
       nav('/');
@@ -45,7 +45,7 @@ export function Home() {
   const [pricingCt, setPricingCt] = useState(0);
   const [err, setErr] = useState('');
   const nav = useNavigate();
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const user = getJSON('user', {} as any);
   useEffect(() => {
     api.get('/api/reports/today').then((r) => setData(r.data)).catch((e) => setErr(errMsg(e)));
     api.get('/api/dashboard').then((r) => setDash(r.data)).catch(() => {});
@@ -142,7 +142,7 @@ function RecentSales() {
       {items.map((s: any) => (
         <div key={s._id} className="lrow">
           <Avatar name={s.customerName || 'W'} gold={s.paymentMethod === 'DUE'} />
-          <div className="grow"><b className="t">{s.receiptNumber} • {s.customerName}</b><small>{s.transactionTime} • {s.items.length} items • {s.paymentMethod}{s.status === 'VOIDED' ? ' • VOIDED' : ''}</small></div>
+          <div className="grow"><b className="t">{s.receiptNumber} • {s.customerName}</b><small>{s.transactionTime} • {(s.items || []).length} items • {s.paymentMethod}{s.status === 'VOIDED' ? ' • VOIDED' : ''}</small></div>
           <div style={{ textAlign: 'right' }}><b>{rs(s.total)}</b>{s.due > 0 && <div><span className="badge-out">due {rs(s.due)}</span></div>}</div>
         </div>
       ))}
@@ -151,7 +151,7 @@ function RecentSales() {
 }
 
 export function More() {
-  const user = JSON.parse(localStorage.getItem('user') || '{}');
+  const user = getJSON('user', {} as any);
   const nav = useNavigate();
   const go = (p: string) => nav(p);
   const item = (e: string, label: string, sub: string, path: string) => (

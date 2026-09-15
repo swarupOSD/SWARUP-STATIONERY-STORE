@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import api, { errMsg } from '../api/client';
-import { Avatar, Empty, Img, PageHead, QtyStepper, Sheet, Skel, rs, useDebounce, useToast, waLink } from '../components/ui';
+import { Avatar, Empty, Img, PageHead, QtyStepper, Sheet, Skel, getJSON, rs, useDebounce, useToast, waLink } from '../components/ui';
 import { Scanner, VoiceSale } from '../components/scan';
 import { useLang } from '../i18n/lang';
 
@@ -22,8 +22,8 @@ export function Sell() {
   const [cats, setCats] = useState<any[]>([]);
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [cart, setCart] = useState<CartLine[]>(() => JSON.parse(localStorage.getItem('cart') || '[]'));
-  const [held, setHeld] = useState<CartLine[] | null>(() => JSON.parse(localStorage.getItem('heldCart') || 'null'));
+  const [cart, setCart] = useState<CartLine[]>(() => getJSON('cart', [] as CartLine[]));
+  const [held, setHeld] = useState<CartLine[] | null>(() => getJSON('heldCart', null as CartLine[] | null));
   const [disc, setDisc] = useState('');
   const [discPct, setDiscPct] = useState('');
   const [method, setMethod] = useState('CASH');
