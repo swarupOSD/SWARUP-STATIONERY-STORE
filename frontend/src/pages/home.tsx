@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api, { errMsg } from '../api/client';
 import { useLang } from '../i18n/lang';
+import { tipOfDay } from '../fx';
 import { Avatar, Clock, Empty, HBarChart, PageHead, Skel, Stat, getJSON, greeting, rs } from '../components/ui';
 
 export function Login() {
@@ -21,8 +22,9 @@ export function Login() {
   };
   return (
     <div style={{ maxWidth: 420, margin: '36px auto' }}>
-      <div className="brand"><span style={{ fontSize: 32 }}>🪔</span><div><h1>Swarup Stationery Store</h1><small>স্বরূপ স্টেশনারি স্টোর • Daily shop notebook</small></div></div>
+      <div className="brand brand-glow"><span style={{ fontSize: 32 }}>🪔</span><div><h1>Swarup Stationery Store</h1><small>স্বরূপ স্টেশনারি স্টোর • Daily shop notebook</small></div></div>
       <div className="puja-banner">✦ শুভ শারদীয়া ✦</div>
+      <p style={{ textAlign: 'center', color: 'var(--muted)', fontSize: 13.5, margin: '6px 0 0' }}>Hisab sohoj, dokan khushi — rojkar bikri ek jaygay 🙏</p>
       <form onSubmit={submit} className="card" style={{ marginTop: 10, padding: 18 }}>
         <h3 style={{ margin: '0 0 4px' }}>Welcome back 🙏</h3>
         <p style={{ color: 'var(--muted)', fontSize: 13.5, margin: '0 0 6px' }}>Login to open your shop for today.</p>
@@ -45,6 +47,7 @@ export function Home() {
   const [pricingCt, setPricingCt] = useState(0);
   const [week, setWeek] = useState<any[]>([]);
   const [dayOpen, setDayOpen] = useState<boolean | null>(null);
+  const tip = tipOfDay(lang);
   const [err, setErr] = useState('');
   const nav = useNavigate();
   const user = getJSON('user', {} as any);
@@ -63,7 +66,9 @@ export function Home() {
     <div className="page">
       <div className="brand">
         <span style={{ fontSize: 30 }}>🪔</span>
-        <div style={{ flex: 1 }}><h1>Swarup Stationery Store</h1><small>{user?.name || user?.username} • {user?.role}</small></div>
+        <div style={{ flex: 1 }}><h1>Swarup Stationery Store</h1><small>{user?.name || user?.username} • {user?.role}</small>
+          <div className="diya-row"><span>🪔</span><span>🪔</span><span>🪔</span><span>🪔</span><span>🪔</span></div>
+        </div>
         <button className="btn sm" onClick={() => setLang(lang === 'en' ? 'bn' : 'en')}>{lang === 'en' ? 'বাংলা' : 'English'}</button>
       </div>
       <div className="puja-banner">✦ শুভ শারদীয়া ✦</div>
@@ -92,8 +97,15 @@ export function Home() {
         <div className="card" style={{ cursor: 'pointer' }} onClick={() => nav('/reports')}>
           <div style={{ display: 'flex', alignItems: 'center' }}><b style={{ flex: 1, fontSize: 14 }}>📊 Last 7 days</b><small style={{ color: 'var(--muted)' }}>tap for reports ›</small></div>
           <HBarChart data={week.map((w: any) => ({ label: String(w.date).slice(8), value: w.totalSales }))} />
+          {week.length >= 2 && week[week.length - 1] && week[week.length - 2] && (
+            <YesterdayPace today={week[week.length - 1].totalSales} yesterday={week[week.length - 2].totalSales} />
+          )}
         </div>
       )}
+      <div className="card tip-card">
+        <small style={{ color: 'var(--muted)', fontWeight: 800 }}>💡 AJKER TIP</small>
+        <div style={{ fontSize: 14, marginTop: 2 }}>{lang === 'bn' ? tip.bn : tip.en}</div>
+      </div>
       <div className="action-grid">
         <button className="btn primary" onClick={() => nav('/sell')}><span className="e">🛒</span>{t('sell')}</button>
         <button className="btn" onClick={() => nav('/purchase')}><span className="e">📦</span>{t('purchase')}</button>
@@ -136,6 +148,18 @@ export function Home() {
 
       <div className="section-t">🧾 Recent sales</div>
       <RecentSales />
+    </div>
+  );
+}
+
+function YesterdayPace({ today, yesterday }: { today: number; yesterday: number }) {
+  if (!(yesterday > 0)) return null;
+  const pct = Math.min(100, Math.round((today / yesterday) * 100));
+  const ahead = today >= yesterday;
+  return (
+    <div style={{ marginTop: 8 }}>
+      <small>{ahead ? `🎉 Gotokal-er cheye ${pct - 100}% egiye!` : `📈 Gotokal ${rs(yesterday)} chhilo — aj ${rs(today)}`}</small>
+      <div className="progress-track"><div className="progress-fill" style={{ width: `${pct}%` }} /></div>
     </div>
   );
 }

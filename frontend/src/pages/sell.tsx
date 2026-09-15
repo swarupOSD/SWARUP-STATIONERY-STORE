@@ -3,6 +3,7 @@ import api, { errMsg } from '../api/client';
 import { Avatar, Empty, Img, PageHead, QtyStepper, Sheet, Skel, getJSON, rs, useDebounce, useToast, waLink } from '../components/ui';
 import { Scanner, VoiceSale } from '../components/scan';
 import { useLang } from '../i18n/lang';
+import { celebrateSale, pop, buzz } from '../fx';
 
 type CartLine = { productId: string; name: string; qty: number; rate: number; stock: number; unit: string };
 type Customer = { _id: string; name: string; phone?: string; totalDue: number; creditLimit?: number };
@@ -56,6 +57,7 @@ export function Sell() {
 
   const add = (p: any, qty = 1) => {
     if (p.stock <= 0) { toast(`${p.name} is out of stock`, 'err'); return; }
+    pop(); buzz(10);
     setCart((c) => {
       const f = c.find((l) => l.productId === p._id);
       if (f) return c.map((l) => (l.productId === p._id ? { ...l, qty: l.qty + qty } : l));
@@ -176,7 +178,7 @@ export function Sell() {
             <input placeholder="Discount ₹" value={disc} onChange={(e) => setDisc(e.target.value)} inputMode="decimal" />
             <input placeholder="Discount %" value={discPct} onChange={(e) => setDiscPct(e.target.value)} inputMode="decimal" />
           </div>
-          <div className="totals" style={{ marginTop: 6 }}>
+          <div className="totals cart-bump" key={subtotal} style={{ marginTop: 6 }}>
             <div className="tr"><span>Subtotal</span><span>{rs(subtotal)}</span></div>
             {discount > 0 && <div className="tr"><span>Discount</span><span>− {rs(discount)}</span></div>}
             <div className="tr grand"><span>Total</span><span>{rs(total)}</span></div>
@@ -270,6 +272,7 @@ export function Sell() {
 export function ReceiptSheet({ sale, onClose }: { sale: any; onClose: () => void }) {
   const toast = useToast();
   const [thermal, setThermal] = useState(false);
+  useEffect(() => { celebrateSale(); }, []);
   const waText = `🧾 *Swarup Stationery Store*\nReceipt: ${sale.receiptNumber}\n${sale.items.map((i: any) => `• ${i.name} x${i.qty} = ₹${i.lineTotal}`).join('\n')}\nTotal: ₹${sale.total} | Paid: ₹${sale.paid}${sale.due ? ` | Due: ₹${sale.due}` : ''}\nThank you! Visit again 🙏 ধন্যবাদ!`;
   const rows = `${sale.items.map((i: any) => `<div class="r"><span>${i.name} x${i.qty}</span><span>Rs.${i.lineTotal}</span></div>`).join('')}`;
   const print = () => {
@@ -283,7 +286,7 @@ export function ReceiptSheet({ sale, onClose }: { sale: any; onClose: () => void
   };
   return (
     <Sheet title="Sale completed ✓" onClose={onClose}>
-      <div className="receipt">
+      <div className="receipt pop-in">
         <div className="rh"><div style={{ fontSize: 26 }}>🪔</div><h3>Swarup Stationery Store</h3><div>{sale.receiptNumber}</div><small>{sale.transactionDate} {sale.transactionTime} IST • {sale.cashier}</small></div>
         {sale.items.map((i: any, idx: number) => <div key={idx} className="rl"><span>{i.name} × {i.qty}</span><span>₹{i.lineTotal}</span></div>)}
         <div className="rl"><span>Subtotal</span><span>₹{sale.subtotal}</span></div>
@@ -292,6 +295,7 @@ export function ReceiptSheet({ sale, onClose }: { sale: any; onClose: () => void
         <div className="rl"><span>Paid ({sale.paymentMethod})</span><span>₹{sale.paid}</span></div>
         {!!sale.due && <div className="rl"><span>Due ({sale.customerName})</span><span>₹{sale.due}</span></div>}
         {!!sale.change && <div className="rl"><span>Change</span><span>₹{sale.change}</span></div>}
+        {!!sale.discount && <div className="rl" style={{ color: 'var(--green)', fontWeight: 800 }}><span>🎉 Customer saved</span><span>₹{sale.discount}</span></div>}
         <div className="rf">Thank you! Visit again 🙏 ধন্যবাদ!</div>
       </div>
       <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 10 }}><input type="checkbox" checked={thermal} onChange={(e) => setThermal(e.target.checked)} style={{ width: 22 }} /> 🧾 80mm thermal printer</label>

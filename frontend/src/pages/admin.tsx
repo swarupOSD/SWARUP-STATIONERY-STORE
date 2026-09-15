@@ -2,6 +2,19 @@ import { useEffect, useState } from 'react';
 import api, { errMsg } from '../api/client';
 import { Empty, PageHead, Sheet, Skel, rs, useConfirm, useToast } from '../components/ui';
 
+import { fxPrefs } from '../fx';
+
+function FxToggles() {
+  const [, bump] = useState(0);
+  const flip = (k: 'sound' | 'buzz') => { (fxPrefs as any)[k] = !(fxPrefs as any)[k]; bump((x) => x + 1); };
+  return (
+    <div>
+      <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}><input type="checkbox" checked={fxPrefs.sound} onChange={() => flip('sound')} style={{ width: 22 }} /> 🔊 Ka-ching sound</label>
+      <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}><input type="checkbox" checked={fxPrefs.buzz} onChange={() => flip('buzz')} style={{ width: 22 }} /> 📳 Vibration</label>
+    </div>
+  );
+}
+
 export function SettingsPage() {
   const toast = useToast();
   const [s, setS] = useState<any>({});
@@ -65,6 +78,11 @@ export function SettingsPage() {
         <small style={{ color: 'var(--muted)' }}>New products from Flipkart bills get sell price = buy × (1 + margin%). You still review each price after.</small>
         <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}><input type="checkbox" checked={!!s.pujaMode} onChange={(e) => set('pujaMode', e.target.checked)} style={{ width: 22 }} /> 🪔 Puja Mode festive theme</label>
         <button className="btn primary block" style={{ marginTop: 12 }} onClick={save}>✓ Save all settings</button>
+      </div>
+      <div className="section-t">🎉 Moja (sound & vibration)</div>
+      <div className="card">
+        <FxToggles />
+        <small style={{ color: 'var(--muted)' }}>Sale hole confetti + ka-ching + vibration — dokane moja lagbe!</small>
       </div>
     </div>
   );
