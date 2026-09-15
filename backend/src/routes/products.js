@@ -50,6 +50,18 @@ router.get('/', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+router.get('/:id/history', async (req, res, next) => {
+  try {
+    const { PriceHistory } = require('../models/Misc');
+    const StockMovement = require('../models/StockMovement');
+    const [price, stock] = await Promise.all([
+      PriceHistory.find({ productId: req.params.id }).sort({ createdAt: -1 }).limit(20),
+      StockMovement.find({ productId: req.params.id }).sort({ createdAt: -1 }).limit(30),
+    ]);
+    res.json({ price, stock });
+  } catch (e) { next(e); }
+});
+
 router.get('/:id', async (req, res, next) => {
   try {
     const p = await Product.findById(req.params.id);

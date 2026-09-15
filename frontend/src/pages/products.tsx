@@ -1,86 +1,196 @@
 import { useEffect, useState } from 'react';
 import api, { errMsg } from '../api/client';
+import { Avatar, Empty, Img, PageHead, QtyStepper, Sheet, Skel, rs, useConfirm, useDebounce, useToast } from '../components/ui';
 
 export function Products() {
+  const toast = useToast();
   const [q, setQ] = useState('');
+  const dq = useDebounce(q);
+  const [cat, setCat] = useState('');
+  const [cats, setCats] = useState<any[]>([]);
+  const [filter, setFilter] = useState<'all' | 'low' | 'out'>('all');
+  const [sort, setSort] = useState('name');
   const [items, setItems] = useState<any[]>([]);
-  const load = async (term = '') => {
-    const { data } = await api.get('/api/products', { params: { q: term, limit: 100 } });
-    setItems(data.items);
+  const [loading, setLoading] = useState(true);
+  const [detail, setDetail] = useState<any>(null);
+
+  useEffect(() => { api.get('/api/categories').then((r) => setCats(r.data)).catch(() => {}); }, []);
+  const load = async () => {
+    setLoading(true);
+    try {
+      const { data } = await api.get('/api/products', { params: { q: dq, category: cat, limit: 120 } });
+      let list = data.items;
+      if (filter === 'low') list = list.filter((p: any) => p.stock > 0 && p.stock <= (p.minStock ?? 5));
+      if (filter === 'out') list = list.filter((p: any) => p.stock <= 0);
+      list = [...list].sort((a: any, b: any) => sort === 'price' ? b.sellingPrice - a.sellingPrice : sort === 'stock' ? a.stock - b.stock : sort === 'margin' ? margin(b) - margin(a) : a.name.localeCompare(b.name));
+      setItems(list);
+    } catch (e: any) { toast(errMsg(e), 'err'); } finally { setLoading(false); }
   };
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [dq, cat, filter, sort]);
+  const margin = (p: any) => (p.purchasePrice > 0 ? Math.round(((p.sellingPrice - p.purchasePrice) / p.purchasePrice) * 100) : 0);
+  const stockVal = items.reduce((s, p) => s + p.stock * (p.purchasePrice / Math.max(1, p.packSize || 1)), 0);
+
   return (
-    <div>
-      <h2>Products</h2>
-      <div style={{ display: 'flex', gap: 8 }}>
-        <input placeholder="Search name / বাংলা / SKU / barcode / brand" value={q} onChange={(e) => { setQ(e.target.value); load(e.target.value); }} />
-        <a className="btn primary" href="/products/new">+ Add</a>
+    <div className="page">
+      <PageHead title="Products" emoji="📦"><a className="btn primary sm" href="/products/new">+ Add</a></PageHead>
+      <div className="toolbar">
+        <input placeholder="Search name / বাংলা / SKU / barcode / brand" value={q} onChange={(e) => setQ(e.target.value)} />
+        <select value={sort} onChange={(e) => setSort(e.target.value)} style={{ flex: '0 0 130px' }}>
+          <option value="name">A–Z</option><option value="price">Price ↓</option><option value="stock">Stock ↑</option><option value="margin">Margin ↓</option>
+        </select>
       </div>
-      <table style={{ marginTop: 10 }}><thead><tr><th>Name</th><th>Price</th><th>Stock</th><th>Cat</th></tr></thead>
-        <tbody>{items.map((p) => <tr key={p._id}><td><a href={`/products/${p._id}`}>{p.name}</a></td><td>₹{p.sellingPrice}</td><td>{p.stock}</td><td>{p.category}</td></tr>)}</tbody>
-      </table>
+      <div className="chips">
+        <button className={`chip${!cat ? ' on' : ''}`} onClick={() => setCat('')}>All</button>
+        {cats.map((c) => <button key={c._id} className={`chip${cat === c.name ? ' on' : ''}`} onClick={() => setCat(cat === c.name ? '' : c.name)}>{c.name}</button>)}
+        <button className={`chip${filter === 'low' ? ' on' : ''}`} onClick={() => setFilter(filter === 'low' ? 'all' : 'low')}>⚠️ Low</button>
+        <button className={`chip${filter === 'out' ? ' on' : ''}`} onClick={() => setFilter(filter === 'out' ? 'all' : 'out')}>🚫 Out</button>
+      </div>
+      <p style={{ color: 'var(--muted)', fontSize: 13 }}>{items.length} products • stock value ≈ {rs(Math.round(stockVal))}</p>
+      {loading ? <Skel n={4} /> : items.length === 0 ? <Empty emoji="📦" title="No products" sub="Add your first product to start selling." action={<a className="btn primary" href="/products/new">+ Add product</a>} /> : (
+        <div className="grid-products">
+          {items.map((p) => (
+            <div className="prod" key={p._id} onClick={() => setDetail(p)} style={{ cursor: 'pointer' }}>
+              <Img src={p.imageUrl} alt={p.name} />
+              <div className="p">
+                <span className="nm">{p.name}</span>
+                <span className="pr"><b>{rs(p.sellingPrice)}</b><span className="margin-tag">+{margin(p)}%</span></span>
+                <span className="pr"><span>stk {p.stock} {p.unit}</span>{p.stock <= 0 ? <span className="badge-out">OUT</span> : p.stock <= (p.minStock ?? 5) ? <span className="badge-low">LOW</span> : <span className="badge-ok">OK</span>}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {detail && <ProductDetail p={detail} onClose={() => { setDetail(null); load(); }} />}
     </div>
   );
 }
 
+function ProductDetail({ p, onClose }: { p: any; onClose: () => void }) {
+  const toast = useToast();
+  const confirm = useConfirm();
+  const [hist, setHist] = useState<any>(null);
+  const [delta, setDelta] = useState('');
+  const [reason, setReason] = useState('');
+  useEffect(() => { api.get(`/api/products/${p._id}/history`).then((r) => setHist(r.data)).catch(() => {}); }, [p._id]);
+  const adjust = async () => {
+    const d = Number(delta);
+    if (!d) { toast('Enter + or − quantity', 'err'); return; }
+    if (!await confirm({ title: `Adjust stock by ${d > 0 ? '+' : ''}${d}?`, body: `${p.name}: ${p.stock} → ${p.stock + d}` })) return;
+    try { await api.post(`/api/products/${p._id}/adjust`, { delta: d, reason: reason || 'Manual adjustment' }); toast('Stock updated ✓', 'ok'); onClose(); }
+    catch (e: any) { toast(errMsg(e), 'err'); }
+  };
+  return (
+    <Sheet title={p.name} onClose={onClose} wide>
+      <div style={{ display: 'flex', gap: 12 }}>
+        <div style={{ width: 110, borderRadius: 12, overflow: 'hidden', border: '1px solid var(--line)' }}><Img src={p.imageUrl} alt={p.name} h={110} /></div>
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: 20, fontWeight: 800 }}>{rs(p.sellingPrice)} <small style={{ color: 'var(--muted)', fontWeight: 400 }}>cost {rs(p.purchasePrice)}</small></div>
+          <div style={{ marginTop: 4 }}>{p.stock <= 0 ? <span className="badge-out">OUT OF STOCK</span> : p.stock <= (p.minStock ?? 5) ? <span className="badge-low">LOW STOCK</span> : <span className="badge-ok">IN STOCK</span>} <small> {p.stock} {p.unit} • min {p.minStock}</small></div>
+          <div style={{ marginTop: 6 }}><a className="btn sm" href={`/products/${p._id}`}>✏️ Edit full details</a></div>
+        </div>
+      </div>
+      <div className="kv"><span>Category</span><span>{p.category}{p.subcategory ? ` / ${p.subcategory}` : ''}</span></div>
+      <div className="kv"><span>Pack</span><span>1 {p.unit === 'packet' ? 'packet' : p.unit} = {p.packSize || 1} pcs</span></div>
+      {p.brand && <div className="kv"><span>Brand</span><span>{p.brand}</span></div>}
+      {(p.sku || p.barcode) && <div className="kv"><span>SKU / Barcode</span><span>{p.sku || p.barcode}</span></div>}
+      {p.supplier && <div className="kv"><span>Supplier</span><span>{p.supplier}</span></div>}
+
+      <div className="section-t">⚖️ Adjust stock</div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <input placeholder="+10 / −5" value={delta} onChange={(e) => setDelta(e.target.value)} inputMode="numeric" />
+        <input placeholder="Reason" value={reason} onChange={(e) => setReason(e.target.value)} />
+        <button className="btn gold" onClick={adjust}>Apply</button>
+      </div>
+
+      <div className="section-t">💲 Price history</div>
+      {!hist ? <Skel n={1} /> : (hist.price || []).length === 0 ? <small style={{ color: 'var(--muted)' }}>No price changes recorded.</small> : (
+        <div className="table-wrap"><table><thead><tr><th>Date</th><th>Buy</th><th>Sell</th><th>By</th></tr></thead>
+          <tbody>{hist.price.map((h: any, i: number) => <tr key={i}><td>{h.date}</td><td>{rs(h.oldPurchasePrice)} → {rs(h.newPurchasePrice)}</td><td>{rs(h.oldSellingPrice)} → {rs(h.newSellingPrice)}</td><td>{h.changedBy}</td></tr>)}</tbody>
+        </table></div>
+      )}
+      <div className="section-t">📒 Stock ledger</div>
+      {!hist ? <Skel n={2} /> : (hist.stock || []).length === 0 ? <small style={{ color: 'var(--muted)' }}>No movements yet.</small> : (
+        hist.stock.slice(0, 12).map((m: any, i: number) => (
+          <div key={i} className="kv"><span><b style={{ color: m.quantityDelta < 0 ? 'var(--rose-tx)' : 'var(--green)' }}>{m.quantityDelta > 0 ? '+' : ''}{m.quantityDelta}</b> {m.type} <small>• {m.date} {m.time}</small></span><span>{m.before} → {m.after}</span></div>
+        ))
+      )}
+    </Sheet>
+  );
+}
+
 export function ProductForm({ editId }: { editId?: string }) {
+  const toast = useToast();
   const [f, setF] = useState<any>({ name: '', purchasePrice: '', sellingPrice: '', stock: '', category: '', unit: '', packSize: 1, imageUrl: '' });
+  const [cats, setCats] = useState<any[]>([]);
   const [preview, setPreview] = useState('');
   const [msg, setMsg] = useState('');
-  const [err, setErr] = useState('');
   const set = (k: string, v: any) => setF((s: any) => ({ ...s, [k]: v }));
-
   useEffect(() => {
+    api.get('/api/categories').then((r) => setCats(r.data)).catch(() => {});
     if (editId) api.get(`/api/products/${editId}`).then((r) => { setF(r.data); setPreview(r.data.imageUrl || ''); });
   }, [editId]);
-
   const suggest = async () => {
     if (!f.name) return;
-    const { data } = await api.post('/api/products/suggest', { name: f.name });
-    setF((s: any) => ({ ...s, category: s.category || data.category, unit: s.unit || data.unit, packSize: s.packSize || data.packSize }));
+    try {
+      const { data } = await api.post('/api/products/suggest', { name: f.name });
+      setF((s: any) => ({ ...s, category: s.category || data.category, unit: s.unit || data.unit, packSize: s.packSize || data.packSize }));
+      setMsg(`Suggested: ${data.category} • ${data.unit} • pack ${data.packSize}`);
+    } catch {}
   };
   const checkImage = async () => {
-    setMsg('Loading image…'); setErr('');
+    setMsg('Loading image…');
     try {
       const { data } = await api.post('/api/products/preview-image', { url: f.imageUrl });
       setPreview(data.resolvedUrl); setMsg('✓ Image loaded');
-    } catch (e: any) { setPreview(''); setErr(e?.response?.data?.hint || errMsg(e)); setMsg(''); }
+    } catch (e: any) { setPreview(''); setMsg(''); toast(e?.response?.data?.hint || errMsg(e), 'err'); }
   };
   const uploadFile = async (file: File) => {
     const fd = new FormData(); fd.append('file', file); fd.append('folder', 'products');
-    const { data } = await api.post('/api/uploads', fd);
-    set('imageUrl', data.url); setPreview(data.url); setMsg('✓ Image loaded');
+    try { const { data } = await api.post('/api/uploads', fd); set('imageUrl', data.url); setPreview(data.url); toast('✓ Image uploaded', 'ok'); }
+    catch (e: any) { toast(errMsg(e), 'err'); }
   };
   const save = async () => {
-    setErr(''); setMsg('');
     try {
       if (editId) await api.patch(`/api/products/${editId}`, f);
       else await api.post('/api/products', { ...f, purchasePrice: Number(f.purchasePrice), sellingPrice: Number(f.sellingPrice), stock: Number(f.stock || 0) });
-      setMsg('Saved ✓'); location.href = '/products';
-    } catch (e: any) { setErr(errMsg(e)); }
+      toast('Saved ✓', 'ok'); location.href = '/products';
+    } catch (e: any) { toast(errMsg(e), 'err'); }
   };
+  const margin = f.purchasePrice > 0 && f.sellingPrice !== '' ? Math.round(((Number(f.sellingPrice) - Number(f.purchasePrice)) / Number(f.purchasePrice)) * 100) : null;
   return (
-    <div style={{ maxWidth: 560 }}>
-      <h2>{editId ? 'Edit' : 'Add'} Product</h2>
-      <label>Name</label><input value={f.name} onChange={(e) => set(e.target.name, e.target.value)} onBlur={suggest} />
-      <label>Bengali name</label><input value={f.nameBn || ''} onChange={(e) => set('nameBn', e.target.value)} />
-      <label>Image URL (direct / Google image URL)</label>
-      <div style={{ display: 'flex', gap: 8 }}><input value={f.imageUrl || ''} onChange={(e) => set('imageUrl', e.target.value)} /><button className="btn" onClick={checkImage}>Preview</button></div>
-      {msg && <p>{msg}</p>}{err && <p style={{ color: '#a00' }}>{err}. Try another URL, upload, or camera.</p>}
-      {preview && <img src={preview} alt="preview" style={{ width: '100%', maxHeight: 220, objectFit: 'contain', background: '#fff', border: '1px solid #eadfc8', borderRadius: 12 }} />}
-      <label>Upload / camera</label><input type="file" accept="image/*" capture="environment" onChange={(e) => e.target.files?.[0] && uploadFile(e.target.files[0])} />
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-        <div><label>Buy price ₹</label><input value={f.purchasePrice} onChange={(e) => set('purchasePrice', e.target.value)} inputMode="decimal" /></div>
-        <div><label>Sell price ₹</label><input value={f.sellingPrice} onChange={(e) => set('sellingPrice', e.target.value)} inputMode="decimal" /></div>
-        <div><label>Stock</label><input value={f.stock} onChange={(e) => set('stock', e.target.value)} inputMode="numeric" /></div>
-        <div><label>Min stock</label><input value={f.minStock || ''} onChange={(e) => set('minStock', e.target.value)} inputMode="numeric" /></div>
-        <div><label>Category</label><input value={f.category || ''} onChange={(e) => set('category', e.target.value)} /></div>
-        <div><label>Unit</label><select value={f.unit || ''} onChange={(e) => set('unit', e.target.value)}><option value="">auto</option>{['piece','packet','box','bottle','can','pouch','kg','gram','liter','ml','dozen','pack','cigarette','other'].map((u) => <option key={u} value={u}>{u}</option>)}</select></div>
-        <div><label>Pack size</label><input value={f.packSize || 1} onChange={(e) => set('packSize', e.target.value)} inputMode="numeric" /></div>
-        <div><label>Barcode / SKU</label><input value={f.barcode || f.sku || ''} onChange={(e) => set('barcode', e.target.value)} /></div>
+    <div className="page" style={{ maxWidth: 600 }}>
+      <PageHead title={editId ? 'Edit product' : 'Add product'} emoji={editId ? '✏️' : '➕'} />
+      <div className="card">
+        <label>Product name *</label><input value={f.name} onChange={(e) => set('name', e.target.value)} onBlur={suggest} placeholder="e.g. Cigarette packet, Kopiko, Pen" />
+        {msg && <small style={{ color: 'var(--green)' }}>{msg}</small>}
+        <div className="row2">
+          <div><label>Bengali name</label><input value={f.nameBn || ''} onChange={(e) => set('nameBn', e.target.value)} placeholder="পেন" /></div>
+          <div><label>Brand</label><input value={f.brand || ''} onChange={(e) => set('brand', e.target.value)} /></div>
+        </div>
+        <label>Photo</label>
+        <div style={{ display: 'flex', gap: 8 }}><input value={f.imageUrl || ''} onChange={(e) => set('imageUrl', e.target.value)} placeholder="Paste image URL…" /><button className="btn gold" onClick={checkImage}>Check</button></div>
+        {preview && <img src={preview} alt="preview" style={{ width: '100%', maxHeight: 200, objectFit: 'contain', background: '#fff', border: '1px solid var(--line)', borderRadius: 12, marginTop: 8 }} />}
+        <label style={{ marginTop: 8 }}>Upload / camera</label><input type="file" accept="image/*" capture="environment" onChange={(e) => e.target.files?.[0] && uploadFile(e.target.files[0])} />
+        <div className="row2">
+          <div><label>Buy price ₹ *</label><input value={f.purchasePrice} onChange={(e) => set('purchasePrice', e.target.value)} inputMode="decimal" /></div>
+          <div><label>Sell price ₹ *</label><input value={f.sellingPrice} onChange={(e) => set('sellingPrice', e.target.value)} inputMode="decimal" /></div>
+        </div>
+        {margin !== null && <div style={{ marginTop: 6 }}><span className="margin-tag">Margin +{margin}% • profit {rs(Number(f.sellingPrice) - Number(f.purchasePrice))}/pc</span></div>}
+        <div className="row2">
+          <div><label>Stock *</label><input value={f.stock} onChange={(e) => set('stock', e.target.value)} inputMode="numeric" /></div>
+          <div><label>Min stock (alert)</label><input value={f.minStock ?? ''} onChange={(e) => set('minStock', e.target.value)} inputMode="numeric" /></div>
+        </div>
+        <div className="row2">
+          <div><label>Category</label><input list="catlist" value={f.category || ''} onChange={(e) => set('category', e.target.value)} placeholder="Stationery…" /><datalist id="catlist">{cats.map((c) => <option key={c._id} value={c.name} />)}</datalist></div>
+          <div><label>Unit</label><select value={f.unit || ''} onChange={(e) => set('unit', e.target.value)}><option value="">auto</option>{['piece', 'packet', 'box', 'bottle', 'can', 'pouch', 'kg', 'gram', 'liter', 'ml', 'dozen', 'pack', 'cigarette', 'other'].map((u) => <option key={u} value={u}>{u}</option>)}</select></div>
+        </div>
+        <div className="row2">
+          <div><label>Pack size (pcs per {f.unit || 'pack'})</label><input value={f.packSize || 1} onChange={(e) => set('packSize', e.target.value)} inputMode="numeric" /></div>
+          <div><label>Barcode / SKU</label><input value={f.barcode || f.sku || ''} onChange={(e) => set('barcode', e.target.value)} /></div>
+        </div>
+        <label>Supplier</label><input value={f.supplier || ''} onChange={(e) => set('supplier', e.target.value)} />
+        <button className="btn primary block" style={{ marginTop: 14 }} onClick={save}>✓ Save product</button>
       </div>
-      <label>Brand</label><input value={f.brand || ''} onChange={(e) => set('brand', e.target.value)} />
-      <button className="btn primary" style={{ width: '100%', marginTop: 12 }} onClick={save}>Save Product</button>
     </div>
   );
 }
