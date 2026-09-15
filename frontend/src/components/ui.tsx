@@ -77,7 +77,7 @@ export function greeting(): string {
 /* ---------- images ---------- */
 export function Img({ src, alt, h = 110 }: { src?: string; alt: string; h?: number }) {
   const [err, setErr] = useState(false);
-  if (!src || err) return <div style={{ height: h, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg,#f7ecd2,#efdcb4)', fontSize: 34 }}>📚</div>;
+  if (!src || err) return <div style={{ height: h, display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f3ead3', fontSize: 32 }}>📚</div>;
   return <img src={src} alt={alt} loading="lazy" onError={() => setErr(true)} style={{ height: h }} />;
 }
 

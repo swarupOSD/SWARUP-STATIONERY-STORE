@@ -145,7 +145,10 @@ export function Admin() {
   ];
   return (
     <div className="page">
-      <PageHead title="Admin panel" emoji="🛠" />
+      <PageHead title="Admin panel" emoji="🛠">
+        {dayState?.closed ? <span className="badge-out">🔒 Day closed</span> : <span className="badge-ok">🔓 Day open</span>}
+      </PageHead>
+      <p style={{ color: 'var(--muted)', fontSize: 13, margin: '0 0 4px 2px' }}>{new Date().toLocaleDateString('en-IN', { timeZone: 'Asia/Kolkata', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} • full control, sabdhane chalao</p>
       {!d ? <Skel n={2} /> : (
         <div className="cards quad">
           <div className="card kpi accent"><small>💰 Today</small><br /><b>{rs(d.today?.totalSales)}</b></div>
