@@ -74,11 +74,11 @@ router.post('/upload', upload.single('bill'), async (req, res, next) => {
       return res.status(422).json({ error: 'Could not read this file.', hint: 'If it is a photo/scanned bill, paste the bill text below or type the items manually, then upload again.' });
     }
 
-    let inv, docType = 'generic', parseNotes = [], source = 'heuristic';
+    let inv, docType = 'generic', parseNotes = [], source = 'heuristic', debug = null;
     if (isFlipkart(rawText)) {
       inv = parseFlipkart(rawText);
-      docType = 'flipkart'; source = 'flipkart-parser'; parseNotes = inv.notes || [];
-      delete inv.notes;
+      docType = 'flipkart'; source = 'flipkart-parser'; parseNotes = inv.notes || []; debug = inv.debug || null;
+      delete inv.notes; delete inv.debug;
     } else {
       const extracted = await extractInvoiceText(rawText);
       inv = extracted.data || {};
@@ -88,7 +88,7 @@ router.post('/upload', upload.single('bill'), async (req, res, next) => {
 
     const mathIssues = validateInvoiceMath(inv);
     if (!inv.items?.length) {
-      return res.status(422).json({ error: 'No items found in this bill.', hint: 'For Flipkart use the downloaded invoice PDF. For photos, paste the bill text (name qty × rate) and upload again, or add the purchase manually.' });
+      return res.status(422).json({ error: 'No items found in this bill.', hint: 'For Flipkart use the downloaded invoice PDF. For photos, paste the bill text (name qty × rate) and upload again, or add the purchase manually.', debug: debug || null, parseNotes, textPreview: rawText.slice(0, 1500), textChars: rawText.length });
     }
     const fp = crypto.createHash('sha256').update(`${(inv.supplier || '').toLowerCase()}|${(inv.invoiceNumber || '').toLowerCase()}|${(inv.orderNumber || '').toLowerCase()}|${Number(inv.grandTotal || 0)}`).digest('hex');
     const or = [{ fingerprint: fp, status: 'COMPLETED' }];
@@ -114,7 +114,8 @@ router.post('/upload', upload.single('bill'), async (req, res, next) => {
     const willCreate = matches.filter((m) => m.status === 'will-create').length;
     await audit(req.user, 'INVOICE_IMPORTED', 'invoice', doc._id, { supplier: doc.supplier, invoiceNumber: doc.invoiceNumber, docType });
     res.status(201).json({
-      import: doc, mathIssues, duplicateWarning: Boolean(dup), matches, source, docType, parseNotes,
+      import: doc, mathIssues, duplicateWarning: Boolean(dup), matches, source, docType, parseNotes, debug,
+      textPreview: rawText.slice(0, 1500), textChars: rawText.length,
       message: docType === 'flipkart'
         ? `Flipkart invoice read: ${doc.items.length} items (${matches.length - willCreate} matched, ${willCreate} new). Review once, then confirm — products & stock get added.`
         : 'Review extracted bill, then confirm to save.',

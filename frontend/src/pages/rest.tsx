@@ -92,18 +92,26 @@ export function Invoices() {
   const [list, setList] = useState<any[]>([]);
   const [addStock, setAddStock] = useState(true);
   const [done, setDone] = useState<any>(null);
+  const [unread, setUnread] = useState<any>(null);
   const [meta, setMeta] = useState({ supplier: '', invoiceNumber: '', orderNumber: '', invoiceDate: '' });
   useEffect(() => { api.get('/api/invoices').then((r) => setList(r.data)).catch(() => {}); }, []);
   const upload = async () => {
     if (!file) { toast('Choose the Flipkart PDF first', 'err'); return; }
-    setBusy(true); setDone(null);
+    setBusy(true); setDone(null); setUnread(null);
     const fd = new FormData(); fd.append('bill', file); fd.append('rawText', rawText);
     try {
       const { data } = await api.post('/api/invoices/upload', fd);
       setResult(data);
       setMeta({ supplier: data.import.supplier || '', invoiceNumber: data.import.invoiceNumber || '', orderNumber: data.import.orderNumber || '', invoiceDate: data.import.invoiceDate || '' });
       if (data.docType === 'flipkart') toast(`Flipkart bill read: ${data.import.items.length} items ✓`, 'ok');
-    } catch (e: any) { toast(e?.response?.data?.hint || errMsg(e), 'err'); } finally { setBusy(false); }
+    } catch (e: any) {
+      const d = e?.response?.data;
+      if (e?.response?.status === 422 && d) setUnread(d);
+      else toast(d?.hint || errMsg(e), 'err');
+    } finally { setBusy(false); }
+  };
+  const addRow = () => {
+    setResult((r: any) => ({ ...r, import: { ...r.import, items: [...r.import.items, { name: '', qty: 1, unitPrice: 0, lineTotal: 0 }] }, matches: [...(r.matches || []), { billName: '', status: 'will-create' }] }));
   };
   const editLine = (i: number, k: string, v: string) => {
     setResult((r: any) => ({ ...r, import: { ...r.import, items: r.import.items.map((it: any, j: number) => j === i ? { ...it, [k]: k === 'name' ? v : Number(v) } : it) } }));
@@ -165,7 +173,21 @@ export function Invoices() {
               </tr>))}</tbody>
           </table></div>
           <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 8 }}><input type="checkbox" checked={addStock} onChange={(e) => setAddStock(e.target.checked)} style={{ width: 22 }} /> Add all to shop stock <b>(+{stockUnits} units)</b></label>
-          <button className="btn primary block" style={{ marginTop: 10 }} onClick={commit}>✓ Confirm — add {newCt} new + stock {matchedCt} matched</button>
+          <button className="btn ghost block" style={{ marginTop: 8 }} onClick={addRow}>＋ Add item manually</button>
+          <button className="btn primary block" style={{ marginTop: 8 }} onClick={commit}>✓ Confirm — add {newCt} new + stock {matchedCt} matched</button>
+          <ReadDebug result={result} />
+        </div>
+      )}
+      {unread && (
+        <div className="card" style={{ marginTop: 10, borderLeft: '4px solid var(--rose-tx)' }}>
+          <b>😕 Couldn't find products in this file</b>
+          <p style={{ color: 'var(--muted)', fontSize: 13.5 }}>{unread.hint}</p>
+          <ReadDebug result={unread} />
+          <div className="btnrow" style={{ marginTop: 8 }}>
+            <a className="btn" href="/purchase">＋ Add manually</a>
+            <button className="btn gold" onClick={() => setUnread(null)}>Try another file</button>
+          </div>
+          <p><small>Tip: paste the bill text in the box above, keep the PDF attached, and press Read bill again.</small></p>
         </div>
       )}
       {done && (
@@ -186,6 +208,19 @@ export function Invoices() {
       <div className="section-t">Past imports</div>
       {list.map((l: any) => <div key={l._id} className="lrow"><span style={{ fontSize: 20 }}>{l.docType === 'flipkart' ? '🛍️' : '🧾'}</span><div className="grow"><b className="t">{l.supplier || '—'} • {l.invoiceNumber || l.orderNumber || '—'}</b><small>{rs(l.grandTotal)} • {l.status}</small></div></div>)}
     </div>
+  );
+}
+
+function ReadDebug({ result }: { result: any }) {
+  const dbg = result?.debug;
+  if (!dbg && !result?.textPreview) return null;
+  return (
+    <details style={{ marginTop: 10 }}>
+      <summary style={{ fontSize: 13.5, color: 'var(--muted)', cursor: 'pointer' }}>🔍 What the app read from the file{dbg ? ` — ${dbg.rowsMatched}/${dbg.rowsSeen} rows, ${dbg.lines} lines` : ''}</summary>
+      {dbg && <div className="kv"><span>Table header</span><b>{dbg.headerFound ? 'found ✓' : 'not found'}</b></div>}
+      {result?.textPreview && <pre style={{ whiteSpace: 'pre-wrap', fontSize: 11.5, background: '#fff', border: '1px solid var(--line)', borderRadius: 10, padding: 10, maxHeight: 220, overflow: 'auto' }}>{result.textPreview}</pre>}
+      <small style={{ color: 'var(--muted)' }}>If this looks wrong (empty/garbled), the PDF is likely a photo-scan — paste the bill text above and retry.</small>
+    </details>
   );
 }
 
