@@ -244,4 +244,74 @@ router.post('/:id/void', requirePerm('sales.void'), async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// Item-level return: restores stock, records refund, adjusts khata. Never edits history.
+router.post('/:id/return', requirePerm('sales.void'), async (req, res, next) => {
+  try {
+    const { Return } = require('../models/Dues');
+    const s = await Sale.findById(req.params.id);
+    if (!s) return res.status(404).json({ error: 'Sale not found.' });
+    if (s.status === 'VOIDED') return res.status(400).json({ error: 'Sale is voided — nothing to return.' });
+    const { items = [], reason = '', refundMethod = 'CASH' } = req.body;
+    if (!Array.isArray(items) || !items.length) return res.status(400).json({ error: 'Choose at least one item to return.' });
+    if (!['CASH', 'UPI', 'BANK', 'ADJUST_DUE', 'OTHER'].includes(refundMethod)) return res.status(400).json({ error: 'Invalid refund method.' });
+    const { date, time } = istParts();
+    const already = new Map((s.returned || []).map((r) => [String(r.productId), Number(r.qty || 0)]));
+    const retItems = [];
+    let refundTotal = 0, refundCost = 0;
+    for (const it of items) {
+      const si = s.items.find((x) => String(x.productId) === String(it.productId));
+      if (!si) return res.status(400).json({ error: 'Item is not part of this bill.' });
+      const qty = Math.floor(Number(it.qty));
+      const maxQ = si.qty - (already.get(String(si.productId)) || 0);
+      if (!(qty > 0) || qty > maxQ) return res.status(400).json({ error: `"${si.name}": can return at most ${maxQ}.` });
+      const packSize = Math.max(1, Math.round(si.baseQty / Math.max(1, si.qty)));
+      const baseQty = qty * packSize;
+      const lineTotal = Math.round((qty * si.rate) * 100) / 100;
+      const lineCost = Math.round((baseQty * (si.purchasePriceSnapshot / Math.max(1, packSize))) * 100) / 100;
+      retItems.push({ productId: si.productId, name: si.name, qty, baseQty, rate: si.rate, lineTotal, lineCost });
+      refundTotal = Math.round((refundTotal + lineTotal) * 100) / 100;
+      refundCost = Math.round((refundCost + lineCost) * 100) / 100;
+      already.set(String(si.productId), (already.get(String(si.productId)) || 0) + qty);
+      const p = await Product.findById(si.productId);
+      if (p) {
+        const before = p.stock, after = before + baseQty;
+        p.stock = after; await p.save();
+        await StockMovement.create({ productId: p._id, productName: p.name, type: 'RETURN', quantityDelta: baseQty, before, after, reference: s.receiptNumber, referenceId: String(s._id), reason: reason || 'Customer return', date, time, user: req.user.username });
+      }
+    }
+    s.returned = [...already.entries()].map(([productId, qty]) => ({ productId, qty }));
+    await s.save();
+    const ret = await Return.create({
+      saleId: s._id, receiptNumber: s.receiptNumber, customerId: s.customerId, customerName: s.customerName,
+      items: retItems, refundTotal, refundCost, refundMethod, reason, returnDate: date, returnTime: time, handledBy: req.user.username,
+    });
+    if (s.customerId) {
+      const c = await Customer.findById(s.customerId);
+      if (c) {
+        c.totalPurchased = Math.max(0, Math.round((c.totalPurchased - refundTotal) * 100) / 100);
+        if (refundMethod === 'ADJUST_DUE') c.totalDue = Math.max(0, Math.round((c.totalDue - refundTotal) * 100) / 100);
+        else c.totalPaid = Math.max(0, Math.round((c.totalPaid - refundTotal) * 100) / 100);
+        c.totalDue = Math.max(0, Math.round((c.totalPurchased - c.totalPaid) * 100) / 100);
+        await c.save();
+      }
+    }
+    await audit(req.user, 'SALE_RETURNED', 'sale', s._id, { receiptNumber: s.receiptNumber, refundTotal, reason });
+    res.status(201).json(ret);
+  } catch (e) { next(e); }
+});
+
+router.get('/returns/list', async (req, res, next) => {
+  try {
+    const { Return } = require('../models/Dues');
+    const { date = '', page = '1', limit = '30' } = req.query;
+    const f = date ? { returnDate: date } : {};
+    const pg = Math.max(1, parseInt(page, 10) || 1), lim = Math.min(100, parseInt(limit, 10) || 30);
+    const [items, total] = await Promise.all([
+      Return.find(f).sort({ createdAt: -1 }).skip((pg - 1) * lim).limit(lim),
+      Return.countDocuments(f),
+    ]);
+    res.json({ items, total, page: pg, limit: lim });
+  } catch (e) { next(e); }
+});
+
 module.exports = router;

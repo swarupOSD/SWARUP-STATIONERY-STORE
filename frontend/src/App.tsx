@@ -6,6 +6,7 @@ import { Sell } from './pages/sell';
 import { Purchase, Khata, CustomerDetail } from './pages/shop';
 import { Products, ProductForm } from './pages/products';
 import { Reports, Invoices, Personal, SalesHistory } from './pages/rest';
+import { Suppliers } from './pages/suppliers';
 import { SettingsPage, Admin } from './pages/admin';
 
 const authed = () => !!localStorage.getItem('token');
@@ -42,6 +43,7 @@ export default function App() {
                   <Route path="/invoices" element={<Guard el={<Invoices />} />} />
                   <Route path="/personal" element={<Guard el={<Personal />} />} />
                   <Route path="/sales" element={<Guard el={<SalesHistory />} />} />
+              <Route path="/suppliers" element={<Guard el={<Suppliers />} />} />
                   <Route path="/settings" element={<Guard el={<SettingsPage />} />} />
                   <Route path="/admin" element={<Guard el={<Admin />} />} />
                   <Route path="/more" element={<Guard el={<More />} />} />

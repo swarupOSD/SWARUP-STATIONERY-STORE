@@ -13,8 +13,10 @@ const router = express.Router();
 router.use(auth);
 
 async function dailySummary(dateStr) {
+  const { Return } = require('../models/Dues');
   const sales = await Sale.find({ transactionDate: dateStr, status: 'COMPLETED' });
   const payments = await Payment.find({ paymentDate: dateStr });
+  const returns = await Return.find({ returnDate: dateStr });
   let totalSales = 0, totalCost = 0, discount = 0, cash = 0, upi = 0, bank = 0, dueGiven = 0, itemsSold = 0;
   const byProduct = new Map(), byHour = new Map(), byMethod = {};
   for (const s of sales) {
@@ -38,13 +40,18 @@ async function dailySummary(dateStr) {
   }
   let dueCollected = 0;
   for (const p of payments) dueCollected += p.amount;
+  let returnsTotal = 0, returnsCost = 0, returnsCount = 0;
+  for (const r of returns) { returnsTotal += r.refundTotal || 0; returnsCost += r.refundCost || 0; returnsCount += 1; }
+  totalSales = Math.round((totalSales - returnsTotal) * 100) / 100;
+  totalCost = Math.round((totalCost - returnsCost) * 100) / 100;
   const profit = Math.round((totalSales - discount * 0 - totalCost - 0) * 100) / 100 - 0; // profit = revenue - COGS - discount already in total
-  const grossProfit = Math.round((sales.reduce((a, s) => a + (s.profit || 0), 0)) * 100) / 100;
+  const grossProfit = Math.round((sales.reduce((a, s) => a + (s.profit || 0), 0) - (returnsTotal - returnsCost)) * 100) / 100;
   return {
     date: dateStr, prettyDate: prettyDateIST(dateStr),
     totalSales: Math.round(totalSales * 100) / 100,
     totalCost: Math.round(totalCost * 100) / 100,
     grossProfit, discount: Math.round(discount * 100) / 100,
+    returnsTotal: Math.round(returnsTotal * 100) / 100, returnsCount,
     cash: Math.round(cash * 100) / 100, upi: Math.round(upi * 100) / 100, bank: Math.round(bank * 100) / 100,
     dueGiven: Math.round(dueGiven * 100) / 100, dueCollected: Math.round(dueCollected * 100) / 100,
     numSales: sales.length, itemsSold, byMethod,

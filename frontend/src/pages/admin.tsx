@@ -79,6 +79,8 @@ export function Admin() {
   const [uname, setUname] = useState(''); const [upass, setUpass] = useState('');
   const [showUsers, setShowUsers] = useState(false);
   const [dayState, setDayState] = useState<any>(null);
+  const [counted, setCounted] = useState('');
+  const expectedCash = d?.today?.cash || 0;
   const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
   useEffect(() => {
     api.get('/api/dashboard').then((r) => setD(r.data)).catch((e) => toast(errMsg(e), 'err'));
@@ -96,8 +98,13 @@ export function Admin() {
     catch (e: any) { toast(errMsg(e), 'err'); }
   };
   const closeDay = async () => {
-    if (!await confirm({ title: `Close business day ${today}?`, body: 'Backdated entries will be blocked until reopened.', okText: 'Close day' })) return;
-    try { const { data } = await api.post(`/api/day/${today}/close`, {}); setDayState(data); toast('Day closed 🔒', 'ok'); } catch (e: any) { toast(errMsg(e), 'err'); }
+    if (!await confirm({ title: `Close business day ${today}?`, body: counted ? `Cash tally: expected ${rs(expectedCash)} vs counted ${rs(Number(counted))} (diff ${rs(Number(counted) - expectedCash)}).` : 'Backdated entries will be blocked until reopened.', okText: 'Close day' })) return;
+    try {
+      const body: any = {};
+      if (counted !== '') { body.countedCash = Number(counted); body.expectedCash = expectedCash; }
+      const { data } = await api.post(`/api/day/${today}/close`, body);
+      setDayState(data); setCounted(''); toast('Day closed 🔒', 'ok');
+    } catch (e: any) { toast(errMsg(e), 'err'); }
   };
   const reopenDay = async () => {
     const reason = prompt('Reopen reason (recorded in audit):');
@@ -108,7 +115,7 @@ export function Admin() {
     ['📦', 'Products', `${d?.lowItems?.length ?? '—'} low`, '/products'], ['🧮', 'Sales', `${d?.today?.numSales ?? '—'} bills today`, '/sales'],
     ['📒', 'Khata dues', rs(d?.today?.dueGiven ?? 0), '/khata'], ['🧾', 'Bills & import', 'scan invoices', '/invoices'],
     ['📊', 'Reports', rs(d?.today?.totalSales ?? 0), '/reports'], ['👥', 'Staff', `${users.length} users`, '#users'],
-    ['📁', 'Documents', 'all files', '/settings'], ['⚙️', 'Settings', 'shop profile', '/settings'],
+    ['🏭', 'Supplier dues', 'pay bills', '/suppliers'], ['⚙️', 'Settings', 'shop profile', '/settings'],
   ];
   return (
     <div className="page">
@@ -125,10 +132,31 @@ export function Admin() {
         {cards.map(([e, l, s, p]) => <a key={l as string} className="btn" href={p as string} onClick={p === '#users' ? (ev) => { ev.preventDefault(); setShowUsers(true); } : undefined}><span className="e">{e}</span>{l}<small style={{ fontWeight: 400, fontSize: 11 }}>{s}</small></a>)}
       </div>
       <div className="section-t">🔒 Business day — {today}</div>
-      <div className="card" style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-        <span style={{ fontSize: 26 }}>{dayState?.closed ? '🔒' : '🔓'}</span>
-        <div style={{ flex: 1 }}><b>{dayState?.closed ? 'Closed' : 'Open'}</b><br /><small style={{ color: 'var(--muted)' }}>{dayState?.closed ? 'Backdated entries blocked' : 'Entries allowed'}</small></div>
-        {dayState?.closed ? <button className="btn gold sm" onClick={reopenDay}>Reopen</button> : <button className="btn sm" onClick={closeDay}>Close day</button>}
+      <div className="card">
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+          <span style={{ fontSize: 26 }}>{dayState?.closed ? '🔒' : '🔓'}</span>
+          <div style={{ flex: 1 }}><b>{dayState?.closed ? 'Closed' : 'Open'}</b><br /><small style={{ color: 'var(--muted)' }}>{dayState?.closed ? 'Backdated entries blocked' : 'Entries allowed'}</small></div>
+          {dayState?.closed ? <button className="btn gold sm" onClick={reopenDay}>Reopen</button> : null}
+        </div>
+        {dayState?.closed ? (
+          dayState?.summary?.countedCash !== undefined ? (
+            <div style={{ marginTop: 8 }}>
+              <div className="kv"><span>Expected cash</span><span>{rs(dayState.summary.expectedCash ?? expectedCash)}</span></div>
+              <div className="kv"><span>Counted</span><span>{rs(dayState.summary.countedCash)}</span></div>
+              <div className="kv"><span>Difference</span><b style={{ color: (dayState.summary.diff || 0) === 0 ? 'var(--green)' : 'var(--rose-tx)' }}>{rs(dayState.summary.diff || 0)}</b></div>
+            </div>
+          ) : <small style={{ color: 'var(--muted)' }}>Closed without cash tally.</small>
+        ) : (
+          <div style={{ marginTop: 8 }}>
+            <div className="kv"><span>💵 Expected cash in drawer</span><b>{rs(expectedCash)}</b></div>
+            <label>Counted cash ₹ (tally before closing)</label>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input value={counted} onChange={(e) => setCounted(e.target.value)} inputMode="decimal" placeholder="Count the drawer…" />
+              <button className="btn primary" onClick={closeDay}>🔒 Close</button>
+            </div>
+            {counted !== '' && <div className={Number(counted) - expectedCash === 0 ? 'change-box' : ''} style={Number(counted) - expectedCash === 0 ? {} : { background: 'var(--amber-bg)', borderRadius: 12, padding: 10, textAlign: 'center', fontWeight: 800, marginTop: 8 }}>Difference: {rs(Number(counted || 0) - expectedCash)}</div>}
+          </div>
+        )}
       </div>
       <div className="section-t">📤 Data export</div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>

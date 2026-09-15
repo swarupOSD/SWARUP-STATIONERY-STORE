@@ -47,7 +47,7 @@ export function Purchase() {
   };
   return (
     <div className="page">
-      <PageHead title="Purchase" emoji="📦" />
+      <PageHead title="Purchase" emoji="📦"><a className="btn gold sm" href="/suppliers">🏭 Supplier dues</a></PageHead>
       <div className="card">
         <div className="row2">
           <div><label>Where bought?</label><select value={source} onChange={(e) => setSource(e.target.value)}>{['Local Shop', 'Flipkart', 'Amazon', 'Supplier', 'Other'].map((s) => <option key={s}>{s}</option>)}</select></div>

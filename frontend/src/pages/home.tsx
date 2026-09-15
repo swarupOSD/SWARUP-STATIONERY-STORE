@@ -164,8 +164,9 @@ export function More() {
   return (
     <div className="page">
       <PageHead title="More" emoji="⋯" />
-      {item('📦', 'Products', 'Catalog, prices, stock', '/products')}
-      {item('🧮', 'Sales history', 'Bills, voids, receipts', '/sales')}
+      {item('📦', 'Products', 'Catalog, prices, stock, labels', '/products')}
+      {item('🏭', 'Supplier dues', 'Credit bills, pay suppliers', '/suppliers')}
+      {item('🧮', 'Sales history', 'Bills, returns, voids, receipts', '/sales')}
       {item('🧾', 'Upload bill', 'Invoice scan & import', '/invoices')}
       {item('👛', 'Personal purchases', 'Mine • Father • Mother', '/personal')}
       {item('📊', 'Reports', 'Daily, product, payment analytics', '/reports')}

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import api, { errMsg } from '../api/client';
-import { Empty, HBarChart, PageHead, Sheet, Skel, SplitBar, rs, useToast } from '../components/ui';
+import { Empty, HBarChart, PageHead, QtyStepper, Sheet, Skel, SplitBar, rs, useToast } from '../components/ui';
 
 const istToday = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
@@ -58,6 +58,7 @@ export function Reports() {
             <div className="card kpi green"><small>🤝 Due collected</small><br /><b>{rs(d.dueCollected)}</b></div>
             <div className="card kpi"><small>🏦 Bank</small><br /><b>{rs(d.bank)}</b></div>
             <div className="card kpi"><small>🏷️ Discount</small><br /><b>{rs(d.discount)}</b></div>
+            {(d.returnsCount > 0) && <div className="card kpi red"><small>↩ Returns</small><br /><b>− {rs(d.returnsTotal)}</b><div className="sub">{d.returnsCount} returns (already adjusted)</div></div>}
           </div>
           <div className="card"><b style={{ fontSize: 14 }}>💳 Payment split</b>
             <SplitBar parts={[{ label: 'Cash', value: d.cash, color: '#1e7e34' }, { label: 'UPI', value: d.upi, color: '#175cd3' }, { label: 'Bank', value: d.bank, color: '#b8860b' }, { label: 'Due', value: d.dueGiven, color: '#8f1d26' }]} />
@@ -265,6 +266,7 @@ export function SalesHistory() {
   const [items, setItems] = useState<any[]>([]);
   const [date, setDate] = useState(istToday());
   const [loading, setLoading] = useState(true);
+  const [retSale, setRetSale] = useState<any>(null);
   const load = async () => {
     setLoading(true);
     try { const { data } = await api.get('/api/sales', { params: { date, limit: 50 } }); setItems(data.items); }
@@ -283,18 +285,64 @@ export function SalesHistory() {
       <PageHead title="Sales history" emoji="🧮" />
       <div className="toolbar"><input type="date" value={date} onChange={(e) => setDate(e.target.value)} /><div className="card" style={{ padding: '8px 14px' }}>Day total <b>{rs(dayTotal)}</b></div></div>
       {loading ? <Skel n={4} /> : items.length === 0 ? <Empty emoji="🧾" title="No sales this day" /> :
-        items.map((s: any) => (
-          <div key={s._id} className="lrow" style={s.status === 'VOIDED' ? { opacity: .6 } : {}}>
-            <span style={{ fontSize: 22 }}>{s.status === 'VOIDED' ? '🚫' : '🧾'}</span>
-            <div className="grow"><b className="t">{s.receiptNumber} • {s.customerName}</b><small>{s.transactionTime} • {s.paymentMethod}{s.due ? ` • due ${rs(s.due)}` : ''}</small></div>
-            <div style={{ textAlign: 'right' }}><b>{rs(s.total)}</b>
-              <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
-                <a className="btn sm ghost" href={`/api/sales/${s._id}/receipt.pdf`} target="_blank" rel="noreferrer">PDF</a>
-                {s.status !== 'VOIDED' && <button className="btn sm ghost" onClick={() => voidSale(s)}>Void</button>}
+        items.map((s: any) => {
+          const retCt = (s.returned || []).reduce((a: number, r: any) => a + (r.qty || 0), 0);
+          return (
+            <div key={s._id} className="lrow" style={s.status === 'VOIDED' ? { opacity: .6 } : {}}>
+              <span style={{ fontSize: 22 }}>{s.status === 'VOIDED' ? '🚫' : '🧾'}</span>
+              <div className="grow"><b className="t">{s.receiptNumber} • {s.customerName}</b><small>{s.transactionTime} • {s.paymentMethod}{s.due ? ` • due ${rs(s.due)}` : ''}{retCt > 0 ? ` • ↩ ${retCt} returned` : ''}</small></div>
+              <div style={{ textAlign: 'right' }}><b>{rs(s.total)}</b>
+                <div style={{ display: 'flex', gap: 4, marginTop: 4 }}>
+                  <a className="btn sm ghost" href={`/api/sales/${s._id}/receipt.pdf`} target="_blank" rel="noreferrer">PDF</a>
+                  {s.status !== 'VOIDED' && <button className="btn sm ghost" onClick={() => setRetSale(s)}>↩ Return</button>}
+                  {s.status !== 'VOIDED' && <button className="btn sm ghost" onClick={() => voidSale(s)}>Void</button>}
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
+      {retSale && <ReturnSheet sale={retSale} onClose={() => { setRetSale(null); load(); }} />}
     </div>
+  );
+}
+
+function ReturnSheet({ sale, onClose }: { sale: any; onClose: () => void }) {
+  const toast = useToast();
+  const already = new Map<string, number>((sale.returned || []).map((r: any): [string, number] => [String(r.productId), Number(r.qty || 0)]));
+  const [qty, setQty] = useState<Record<string, number>>({});
+  const [reason, setReason] = useState('');
+  const [method, setMethod] = useState('CASH');
+  const [busy, setBusy] = useState(false);
+  const lines = sale.items.map((it: any) => {
+    const max = it.qty - (already.get(String(it.productId)) || 0);
+    return { ...it, max, sel: Math.min(qty[String(it.productId)] || 0, Math.max(0, max)) };
+  }).filter((l: any) => l.max > 0);
+  const refund = lines.reduce((s: number, l: any) => s + l.sel * l.rate, 0);
+  const submit = async () => {
+    const items = lines.filter((l: any) => l.sel > 0).map((l: any) => ({ productId: l.productId, qty: l.sel }));
+    if (!items.length) { toast('Choose return quantity', 'err'); return; }
+    setBusy(true);
+    try {
+      const { data } = await api.post(`/api/sales/${sale._id}/return`, { items, reason, refundMethod: method });
+      toast(`Return saved — refund ${rs(data.refundTotal)} ✓`, 'ok'); onClose();
+    } catch (e: any) { toast(errMsg(e), 'err'); } finally { setBusy(false); }
+  };
+  if (!lines.length) return <Sheet title="Nothing returnable" onClose={onClose}><p>All items on this bill were already returned.</p></Sheet>;
+  return (
+    <Sheet title={`↩ Return • ${sale.receiptNumber}`} onClose={onClose}>
+      {lines.map((l: any) => (
+        <div key={String(l.productId)} className="cartline">
+          <div className="nm"><b>{l.name}</b><small>sold {l.qty} @ {rs(l.rate)} • returnable {l.max}</small></div>
+          <QtyStepper qty={l.sel} onChange={(v) => setQty({ ...qty, [String(l.productId)]: Math.min(v, l.max) })} />
+          <b>{rs(l.sel * l.rate)}</b>
+        </div>
+      ))}
+      <label>Reason</label><input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Damaged / wrong item…" />
+      <label>Refund by</label>
+      <div className="chips">{['CASH', 'UPI', 'BANK', 'ADJUST_DUE'].map((m) => <button key={m} className={`chip${method === m ? ' on' : ''}`} onClick={() => setMethod(m)}>{m === 'ADJUST_DUE' ? 'Adjust due' : m}</button>)}</div>
+      <div className="totals"><div className="tr grand"><span>Refund</span><span>{rs(refund)}</span></div></div>
+      <p><small>Stock goes back up • khata auto-adjusts{method === 'ADJUST_DUE' ? ' • customer due reduced' : ' • cash returned to customer'}.</small></p>
+      <button className="btn primary block" onClick={submit} disabled={busy}>{busy ? 'Saving…' : `✓ Confirm return ${rs(refund)}`}</button>
+    </Sheet>
   );
 }

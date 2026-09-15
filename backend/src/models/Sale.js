@@ -37,6 +37,7 @@ const SaleSchema = new mongoose.Schema({
   profit: { type: Number, default: 0 },
   status: { type: String, enum: ['COMPLETED','VOIDED'], default: 'COMPLETED', index: true },
   voidReason: { type: String, default: '' },
+  returned: [{ productId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product' }, qty: { type: Number, default: 0 } }],
   cashier: { type: String, default: '' },
   cashierId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   transactionDate: { type: String, required: true, index: true }, // YYYY-MM-DD IST

@@ -156,6 +156,53 @@ async function check(name, fn) {
       const re = await call('POST', `/api/day/${today}/reopen`, { reason: 'sweep test' });
       assert.equal(re.status, 200);
     });
+    await check('day close with cash tally', async () => {
+      const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+      const rep = await call('GET', '/api/reports/today');
+      const exp = rep.data.cash || 0;
+      const c = await call('POST', `/api/day/${today}/close`, { countedCash: exp + 10, expectedCash: exp });
+      assert.equal(c.status, 200); assert.equal(c.data.summary.diff, 10);
+      await call('POST', `/api/day/${today}/reopen`, { reason: 'sweep tally done' });
+    });
+    await check('item return restores stock + khata', async () => {
+      const key = 'sw-ret-' + Date.now();
+      const a = await call('POST', '/api/sales', { items: [{ productId: global.__pid, qty: 4 }], paymentMethod: 'DUE', paid: 10, customerName: 'Sweep Ret', idempotencyKey: key });
+      assert.equal(a.status, 201);
+      const before = (await call('GET', `/api/products/${global.__pid}`)).data.stock;
+      const bad = await call('POST', `/api/sales/${a.data._id}/return`, { items: [{ productId: global.__pid, qty: 9 }], refundMethod: 'CASH' });
+      assert.equal(bad.status, 400);
+      const r1 = await call('POST', `/api/sales/${a.data._id}/return`, { items: [{ productId: global.__pid, qty: 3 }], reason: 'sweep', refundMethod: 'ADJUST_DUE' });
+      assert.equal(r1.status, 201); assert.equal(r1.data.refundTotal, 30);
+      const after = (await call('GET', `/api/products/${global.__pid}`)).data.stock;
+      assert.equal(after, before + 3);
+      const kh = await call('GET', `/api/customers/${a.data.customerId}`);
+      assert.equal(kh.data.customer.totalDue, 0, 'due 30-30=0, got ' + kh.data.customer.totalDue);
+      const r2 = await call('POST', `/api/sales/${a.data._id}/return`, { items: [{ productId: global.__pid, qty: 1 }], refundMethod: 'CASH' });
+      assert.equal(r2.status, 201);
+      const r3 = await call('POST', `/api/sales/${a.data._id}/return`, { items: [{ productId: global.__pid, qty: 1 }], refundMethod: 'CASH' });
+      assert.equal(r3.status, 400, 'over-return must fail');
+      const rep = await call('GET', '/api/reports/today');
+      assert.ok(rep.data.returnsCount >= 2, 'returns counted');
+    });
+    await check('supplier dues + FIFO pay', async () => {
+      const inv = 'SWSUP-' + Date.now();
+      const p1 = await call('POST', '/api/purchases', { supplier: 'Sweep Supplier', invoiceNumber: inv + 'A', items: [{ name: 'Sweep Test Pen', productId: global.__pid, qty: 10, baseQty: 10, unitPrice: 8, lineTotal: 80 }], paid: 0, addToStock: false });
+      assert.equal(p1.status, 201);
+      const p2 = await call('POST', '/api/purchases', { supplier: 'Sweep Supplier', invoiceNumber: inv + 'B', items: [{ name: 'Sweep Test Pen', productId: global.__pid, qty: 10, baseQty: 10, unitPrice: 8, lineTotal: 80 }], paid: 30, addToStock: false });
+      assert.equal(p2.status, 201);
+      const dues = await call('GET', '/api/suppliers/dues');
+      const mine = dues.data.find((x) => x.name === 'Sweep Supplier');
+      assert.equal(mine.due, 130);
+      const over = await call('POST', '/api/suppliers/pay', { supplierName: 'Sweep Supplier', amount: 200, method: 'CASH' });
+      assert.equal(over.status, 400);
+      const pay = await call('POST', '/api/suppliers/pay', { supplierName: 'Sweep Supplier', amount: 100, method: 'UPI', reference: 'UTR1' });
+      assert.equal(pay.status, 201); assert.equal(pay.data.remaining, 30);
+      assert.equal(pay.data.payment.allocations.length, 2, 'split across 2 bills FIFO');
+      assert.equal(pay.data.payment.allocations[0].amount, 80);
+      const led = await call('GET', '/api/suppliers/ledger?name=Sweep Supplier');
+      assert.equal(led.data.due, 30);
+      assert.equal(led.data.payments.length, 1);
+    });
   }
 
   console.log(fails.length ? `\nSWEEP DONE: ${fails.length} FAILURES\n- ` + fails.join('\n- ') : '\nSWEEP PASS: all checked endpoints OK');

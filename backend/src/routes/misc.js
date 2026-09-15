@@ -150,8 +150,17 @@ router.get('/day/:date', auth, async (req, res, next) => {
 });
 router.post('/day/:date/close', auth, requireRole('ADMIN'), async (req, res, next) => {
   try {
-    const d = await DailyClosing.findOneAndUpdate({ date: req.params.date }, { $set: { closed: true, closedBy: req.user.username } }, { upsert: true, new: true });
-    await audit(req.user, 'DAY_CLOSED', 'day', req.params.date, {});
+    const { countedCash, expectedCash } = req.body || {};
+    const summary = {};
+    if (countedCash !== undefined && countedCash !== '' && countedCash !== null) {
+      summary.countedCash = Number(countedCash);
+      if (!(summary.countedCash >= 0)) return res.status(400).json({ error: 'Counted cash must be a number.' });
+      if (expectedCash !== undefined && expectedCash !== '') summary.expectedCash = Number(expectedCash);
+      if (summary.expectedCash !== undefined) summary.diff = Math.round((summary.countedCash - summary.expectedCash) * 100) / 100;
+      summary.countedBy = req.user.username;
+    }
+    const d = await DailyClosing.findOneAndUpdate({ date: req.params.date }, { $set: { closed: true, closedBy: req.user.username, summary } }, { upsert: true, new: true });
+    await audit(req.user, 'DAY_CLOSED', 'day', req.params.date, summary);
     res.json(d);
   } catch (e) { next(e); }
 });

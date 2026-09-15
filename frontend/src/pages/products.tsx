@@ -75,6 +75,7 @@ function ProductDetail({ p, onClose }: { p: any; onClose: () => void }) {
   const [delta, setDelta] = useState('');
   const [reason, setReason] = useState('');
   const [newPrice, setNewPrice] = useState('');
+  const [labels, setLabels] = useState(false);
   useEffect(() => { api.get(`/api/products/${p._id}/history`).then((r) => setHist(r.data)).catch(() => {}); }, [p._id]);
   const adjust = async () => {
     const d = Number(delta);
@@ -90,7 +91,7 @@ function ProductDetail({ p, onClose }: { p: any; onClose: () => void }) {
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 20, fontWeight: 800 }}>{rs(p.sellingPrice)} <small style={{ color: 'var(--muted)', fontWeight: 400 }}>cost {rs(p.purchasePrice)}</small></div>
           <div style={{ marginTop: 4 }}>{p.stock <= 0 ? <span className="badge-out">OUT OF STOCK</span> : p.stock <= (p.minStock ?? 5) ? <span className="badge-low">LOW STOCK</span> : <span className="badge-ok">IN STOCK</span>} <small> {p.stock} {p.unit} • min {p.minStock}</small></div>
-          <div style={{ marginTop: 6 }}><a className="btn sm" href={`/products/${p._id}`}>✏️ Edit full details</a></div>
+          <div style={{ marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap' }}><a className="btn sm" href={`/products/${p._id}`}>✏️ Edit</a><button className="btn sm gold" onClick={() => setLabels(true)}>🏷️ Labels</button></div>
         </div>
       </div>
       <div className="kv"><span>Category</span><span>{p.category}{p.subcategory ? ` / ${p.subcategory}` : ''}</span></div>
@@ -132,6 +133,45 @@ function ProductDetail({ p, onClose }: { p: any; onClose: () => void }) {
           <div key={i} className="kv"><span><b style={{ color: m.quantityDelta < 0 ? 'var(--rose-tx)' : 'var(--green)' }}>{m.quantityDelta > 0 ? '+' : ''}{m.quantityDelta}</b> {m.type} <small>• {m.date} {m.time}</small></span><span>{m.before} → {m.after}</span></div>
         ))
       )}
+      {labels && <LabelSheet p={p} onClose={() => setLabels(false)} />}
+    </Sheet>
+  );
+}
+
+function LabelSheet({ p, onClose }: { p: any; onClose: () => void }) {
+  const toast = useToast();
+  const [copies, setCopies] = useState(12);
+  const code = String(p.barcode || p.sku || `SS${String(p._id).slice(-8).toUpperCase()}`).replace(/\s/g, '');
+  useEffect(() => {
+    let ok = true;
+    import('jsbarcode').then((m: any) => {
+      if (!ok) return;
+      const J = m.default || m;
+      document.querySelectorAll<SVGSVGElement>('.lbl-barcode').forEach((el) => {
+        try { J(el, code, { format: 'CODE128', width: 2, height: 44, displayValue: true, fontSize: 13 }); } catch {}
+      });
+    }).catch(() => toast('Barcode lib failed to load', 'err'));
+    return () => { ok = false; };
+  }, [copies]);
+  const print = () => {
+    const w = window.open('', '_blank', 'width=600');
+    if (!w) { toast('Popup blocked — allow popups to print', 'err'); return; }
+    const one = document.querySelector('.lbl-barcode')?.outerHTML || '';
+    const label = `<div style="width:180px;border:1px dashed #999;border-radius:8px;padding:8px;margin:6px;display:inline-block;text-align:center;font-family:sans-serif"><div style="font-weight:800;font-size:13px">${p.name}</div><div style="font-size:15px">Rs.${p.sellingPrice}</div>${one}</div>`;
+    w.document.write(`<html><head><title>Labels — ${p.name}</title></head><body>${label.repeat(Math.min(48, Math.max(1, copies)))}<script>onload=()=>{print();}<\/script></body></html>`);
+    w.document.close();
+  };
+  return (
+    <Sheet title={`🏷️ Labels • ${p.name}`} onClose={onClose}>
+      {!p.barcode && !p.sku && <p><small style={{ color: 'var(--amber-tx)' }}>No barcode saved — using shop code {code}. Add a real barcode in Edit for scanning.</small></p>}
+      <div className="kv"><span>Code</span><b>{code}</b></div>
+      <label>Copies (1–48)</label>
+      <input type="number" min={1} max={48} value={copies} onChange={(e) => setCopies(Math.min(48, Math.max(1, Number(e.target.value) || 1)))} />
+      <div style={{ background: '#fff', border: '1px solid var(--line)', borderRadius: 12, padding: 12, textAlign: 'center', marginTop: 8 }}>
+        <b>{p.name}</b><div>Rs.{p.sellingPrice}</div>
+        <svg className="lbl-barcode" />
+      </div>
+      <button className="btn primary block" style={{ marginTop: 10 }} onClick={print}>🖨️ Print {copies} labels</button>
     </Sheet>
   );
 }
