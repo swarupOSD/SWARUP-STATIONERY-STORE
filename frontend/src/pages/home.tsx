@@ -205,6 +205,8 @@ export function More() {
       {item('🧮', 'Sales history', 'Bills, returns, voids, receipts', '/sales')}
       {item('🧾', 'Upload bill', 'Invoice scan & import', '/invoices')}
       {item('👛', 'Personal purchases', 'Mine • Father • Mother', '/personal')}
+      {item('💸', 'Kharcha', 'Rent, current, salary…', '/expenses')}
+      {item('📋', 'Buy list', 'Kin-te hobe + supplier order', '/buy-list')}
       {item('📊', 'Reports', 'Daily, product, payment analytics', '/reports')}
       {item('⚙️', 'Settings', 'Shop, UPI QR, language, theme', '/settings')}
       {user?.role === 'ADMIN' && item('🛠', 'Admin panel', 'Users, audit, day close, health', '/admin')}

@@ -74,6 +74,7 @@ function ProductDetail({ p, onClose }: { p: any; onClose: () => void }) {
   const [hist, setHist] = useState<any>(null);
   const [delta, setDelta] = useState('');
   const [reason, setReason] = useState('');
+  const [counted, setCounted] = useState('');
   const [newPrice, setNewPrice] = useState('');
   const [labels, setLabels] = useState(false);
   useEffect(() => { api.get(`/api/products/${p._id}/history`).then((r) => setHist(r.data)).catch(() => {}); }, [p._id]);
@@ -82,6 +83,14 @@ function ProductDetail({ p, onClose }: { p: any; onClose: () => void }) {
     if (!d) { toast('Enter + or − quantity', 'err'); return; }
     if (!await confirm({ title: `Adjust stock by ${d > 0 ? '+' : ''}${d}?`, body: `${p.name}: ${p.stock} → ${p.stock + d}` })) return;
     try { await api.post(`/api/products/${p._id}/adjust`, { delta: d, reason: reason || 'Manual adjustment' }); toast('Stock updated ✓', 'ok'); onClose(); }
+    catch (e: any) { toast(errMsg(e), 'err'); }
+  };
+  const setExact = async () => {
+    if (counted === '' || !(Number(counted) >= 0)) { toast('Counted qty dao', 'err'); return; }
+    const d = Number(counted) - p.stock;
+    if (d === 0) { toast('Already matches ✓', 'ok'); return; }
+    if (!await confirm({ title: `Set stock to ${counted}?`, body: `${p.name}: ${p.stock} → ${counted} (diff ${d > 0 ? '+' : ''}${d})` })) return;
+    try { await api.post(`/api/products/${p._id}/adjust`, { delta: d, reason: 'Physical count' }); toast('Stock miliye nilam ✓', 'ok'); onClose(); }
     catch (e: any) { toast(errMsg(e), 'err'); }
   };
   return (
@@ -114,12 +123,17 @@ function ProductDetail({ p, onClose }: { p: any; onClose: () => void }) {
         </div>
       )}
 
-      <div className="section-t">⚖️ Adjust stock</div>
+      <div className="section-t">⚖️ Stock check (miliye nin)</div>
       <div style={{ display: 'flex', gap: 8 }}>
         <input placeholder="+10 / −5" value={delta} onChange={(e) => setDelta(e.target.value)} inputMode="numeric" />
         <input placeholder="Reason" value={reason} onChange={(e) => setReason(e.target.value)} />
         <button className="btn gold" onClick={adjust}>Apply</button>
       </div>
+      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+        <input placeholder={`Counted: ekhon hate ${p.stock}`} value={counted} onChange={(e) => setCounted(e.target.value)} inputMode="numeric" />
+        <button className="btn" onClick={setExact}>Set exact</button>
+      </div>
+      <small style={{ color: 'var(--muted)' }}>Dokane gune ja pelen tai bosan — parthokyo auto-adjust hobe.</small>
 
       <div className="section-t">💲 Price history</div>
       {!hist ? <Skel n={1} /> : (hist.price || []).length === 0 ? <small style={{ color: 'var(--muted)' }}>No price changes recorded.</small> : (

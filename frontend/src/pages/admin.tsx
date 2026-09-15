@@ -129,6 +129,14 @@ export function Admin() {
     if (!reason) return;
     try { const { data } = await api.post(`/api/day/${today}/reopen`, { reason }); setDayState(data); toast('Day reopened', 'ok'); } catch (e: any) { toast(errMsg(e), 'err'); }
   };
+  const printSlip = (day: any, t: any) => {
+    const s = day?.summary || {};
+    const w = window.open('', '_blank', 'width=420');
+    if (!w) { toast('Popup blocked — allow popups to print', 'err'); return; }
+    const r = (k: string, v: string) => `<div class="r"><span>${k}</span><span>${v}</span></div>`;
+    w.document.write(`<html><head><title>Closing ${day?.date || today}</title><style>@page{size:80mm auto;margin:2mm}body{font-family:monospace;font-size:11px;width:72mm;margin:0;padding:2mm;color:#000}h3{text-align:center;font-size:13px;margin:2px 0}.c{text-align:center}.r{display:flex;justify-content:space-between}hr{border-top:1px dashed #000;margin:4px 0}</style></head><body><h3>Swarup Stationery Store</h3><p class="c">DAY CLOSE — ${day?.date || today}<br>closed by ${day?.closedBy || ''}</p><hr>${r('Sales', 'Rs.' + (t?.totalSales ?? 0))}${r('Profit', 'Rs.' + (t?.grossProfit ?? 0))}${r('Cash', 'Rs.' + (t?.cash ?? 0))}${r('UPI', 'Rs.' + (t?.upi ?? 0))}${r('Due given', 'Rs.' + (t?.dueGiven ?? 0))}${r('Collected', 'Rs.' + (t?.dueCollected ?? 0))}${r('Bills', String(t?.numSales ?? 0))}<hr>${r('Expected cash', 'Rs.' + (s.expectedCash ?? ''))}${r('Counted', 'Rs.' + (s.countedCash ?? ''))}${r('Diff', 'Rs.' + (s.diff ?? 0))}<p class="c">Subho Ratri! 🙏</p><script>onload=()=>{print();}</script></body></html>`);
+    w.document.close();
+  };
   const cards = [
     ['📦', 'Products', `${d?.lowItems?.length ?? '—'} low`, '/products'], ['🧮', 'Sales', `${d?.today?.numSales ?? '—'} bills today`, '/sales'],
     ['📒', 'Khata dues', rs(d?.today?.dueGiven ?? 0), '/khata'], ['🧾', 'Bills & import', 'scan invoices', '/invoices'],
@@ -175,6 +183,7 @@ export function Admin() {
             {counted !== '' && <div className={Number(counted) - expectedCash === 0 ? 'change-box' : ''} style={Number(counted) - expectedCash === 0 ? {} : { background: 'var(--amber-bg)', borderRadius: 12, padding: 10, textAlign: 'center', fontWeight: 800, marginTop: 8 }}>Difference: {rs(Number(counted || 0) - expectedCash)}</div>}
           </div>
         )}
+        {dayState?.closed && <button className="btn gold block" style={{ marginTop: 10 }} onClick={() => printSlip(dayState, d?.today)}>🖨️ Print closing slip (80mm)</button>}
       </div>
       <div className="section-t">📤 Data export & backup</div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>

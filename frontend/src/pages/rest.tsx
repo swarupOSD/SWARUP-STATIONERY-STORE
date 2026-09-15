@@ -52,7 +52,7 @@ export function Reports() {
           <div className="cards quad">
             <div className="card kpi accent"><small>💰 Sales</small><br /><b>{rs(d.totalSales)}</b><div className="sub">{d.numSales} bills • {d.itemsSold} items</div></div>
             <div className="card kpi green"><small>📈 Profit</small><br /><b>{rs(d.grossProfit)}</b><div className="sub">cost {rs(d.totalCost)}</div></div>
-            <div className="card kpi"><small>💵 Cash</small><br /><b>{rs(d.cash)}</b></div>
+            <a className="card kpi" style={{ textDecoration: 'none', color: 'inherit' }} href="/expenses"><small>💸 Kharcha</small><br /><b>{rs(d.expensesTotal || 0)}</b><div className="sub">net {rs(d.netProfit ?? d.grossProfit)} ›</div></a>            <div className="card kpi"><small>💵 Cash</small><br /><b>{rs(d.cash)}</b></div>
             <div className="card kpi"><small>📱 UPI</small><br /><b>{rs(d.upi)}</b></div>
             <div className="card kpi red"><small>📒 Due given</small><br /><b>{rs(d.dueGiven)}</b></div>
             <div className="card kpi green"><small>🤝 Due collected</small><br /><b>{rs(d.dueCollected)}</b></div>

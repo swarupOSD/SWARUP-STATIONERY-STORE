@@ -40,6 +40,7 @@ app.use('/api/purchases', require('./routes/purchases'));
 app.use('/api/customers', require('./routes/customers'));
 app.use('/api/reports', require('./routes/reports'));
 app.use('/api/invoices', require('./routes/invoices'));
+app.use('/api/expenses', require('./routes/expenses'));
 app.use('/api', require('./routes/misc'));
 
 app.get('/', (req, res) => res.json({ name: 'Swarup Stationery Store API', ok: true }));

@@ -218,6 +218,21 @@ async function check(name, fn) {
       const bk = await call('GET', '/api/reports/export/all');
       assert.equal(bk.status, 200); assert.ok(Array.isArray(bk.data.products) && Array.isArray(bk.data.sales));
     });
+    await check('expenses + net profit + buy list', async () => {
+      const bad = await call('POST', '/api/expenses', { title: '', amount: 0 });
+      assert.equal(bad.status, 400);
+      const e1 = await call('POST', '/api/expenses', { title: 'Sweep rent', category: 'Rent', amount: 100, method: 'CASH' });
+      assert.equal(e1.status, 201);
+      const l = await call('GET', '/api/expenses');
+      assert.equal(l.status, 200); assert.ok(l.data.sum >= 100);
+      const rep = await call('GET', '/api/reports/today');
+      assert.ok(rep.data.expensesTotal >= 100, 'expenses in report');
+      assert.equal(rep.data.netProfit, Math.round((rep.data.grossProfit - rep.data.expensesTotal) * 100) / 100);
+      const bl = await call('GET', '/api/reports/buy-list');
+      assert.equal(bl.status, 200); assert.ok('items' in bl.data);
+      const del = await call('DELETE', `/api/expenses/${e1.data._id}`);
+      assert.equal(del.status, 200);
+    });
   }
 
   console.log(fails.length ? `\nSWEEP DONE: ${fails.length} FAILURES\n- ` + fails.join('\n- ') : '\nSWEEP PASS: all checked endpoints OK');

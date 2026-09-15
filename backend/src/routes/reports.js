@@ -15,9 +15,11 @@ router.use(auth);
 
 async function dailySummary(dateStr) {
   const { Return } = require('../models/Dues');
+  const Expense = require('../models/Expense');
   const sales = await Sale.find({ transactionDate: dateStr, status: 'COMPLETED' });
   const payments = await Payment.find({ paymentDate: dateStr });
   const returns = await Return.find({ returnDate: dateStr });
+  const expenses = await Expense.find({ expenseDate: dateStr });
   let totalSales = 0, totalCost = 0, discount = 0, cash = 0, upi = 0, bank = 0, dueGiven = 0, itemsSold = 0;
   const byProduct = new Map(), byHour = new Map(), byMethod = {};
   for (const s of sales) {
@@ -47,11 +49,14 @@ async function dailySummary(dateStr) {
   totalCost = Math.round((totalCost - returnsCost) * 100) / 100;
   const profit = Math.round((totalSales - discount * 0 - totalCost - 0) * 100) / 100 - 0; // profit = revenue - COGS - discount already in total
   const grossProfit = Math.round((sales.reduce((a, s) => a + (s.profit || 0), 0) - (returnsTotal - returnsCost)) * 100) / 100;
+  const expensesTotal = Math.round(expenses.reduce((s, e) => s + (e.amount || 0), 0) * 100) / 100;
+  const netProfit = Math.round((grossProfit - expensesTotal) * 100) / 100;
   return {
     date: dateStr, prettyDate: prettyDateIST(dateStr),
     totalSales: Math.round(totalSales * 100) / 100,
     totalCost: Math.round(totalCost * 100) / 100,
     grossProfit, discount: Math.round(discount * 100) / 100,
+    expensesTotal, netProfit,
     returnsTotal: Math.round(returnsTotal * 100) / 100, returnsCount,
     cash: Math.round(cash * 100) / 100, upi: Math.round(upi * 100) / 100, bank: Math.round(bank * 100) / 100,
     dueGiven: Math.round(dueGiven * 100) / 100, dueCollected: Math.round(dueCollected * 100) / 100,
@@ -127,6 +132,33 @@ router.get('/export/:type', async (req, res, next) => {
       return res.send(csv);
     }
     res.json(rows);
+  } catch (e) { next(e); }
+});
+
+// Buy list: low/out-of-stock products with suggested order qty + last buy price.
+router.get('/buy-list', async (req, res, next) => {
+  try {
+    const low = await Product.find({ active: true, $expr: { $lte: ['$stock', '$minStock'] } })
+      .select('name stock minStock purchasePrice unit packSize supplier category').limit(200).lean();
+    const ids = low.map((p) => p._id);
+    const lastBuys = ids.length ? await Purchase.aggregate([
+      { $match: { status: 'COMPLETED', 'items.productId': { $in: ids } } },
+      { $unwind: '$items' },
+      { $match: { 'items.productId': { $in: ids } } },
+      { $sort: { createdAt: -1 } },
+      { $group: { _id: '$items.productId', unitPrice: { $first: '$items.unitPrice' }, supplier: { $first: '$supplier' } } },
+    ]) : [];
+    const lbMap = new Map(lastBuys.map((x) => [String(x._id), x]));
+    const items = low.map((p) => {
+      const lb = lbMap.get(String(p._id)) || {};
+      const suggest = Math.max(1, (p.minStock ?? 5) * 2 - p.stock);
+      return {
+        productId: p._id, name: p.name, stock: p.stock, minStock: p.minStock, unit: p.unit,
+        lastPrice: lb.unitPrice ?? p.purchasePrice, supplier: lb.supplier || p.supplier || '',
+        suggestQty: suggest, estCost: Math.round(suggest * (lb.unitPrice ?? p.purchasePrice) * 100) / 100,
+      };
+    });
+    res.json({ count: items.length, estTotal: Math.round(items.reduce((s, x) => s + x.estCost, 0) * 100) / 100, items });
   } catch (e) { next(e); }
 });
 
