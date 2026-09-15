@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route, NavLink, Navigate, useParams } from 'react-router-dom';
 import { LangProvider } from './i18n/lang';
-import { ConfirmProvider, ToastProvider } from './components/ui';
+import { ConfirmProvider, ErrorBoundary, ToastProvider } from './components/ui';
 import { Login, Home, More } from './pages/home';
 import { Sell } from './pages/sell';
 import { Purchase, Khata, CustomerDetail } from './pages/shop';
@@ -17,6 +17,7 @@ const EditP = () => { const { id } = useParams(); return <ProductForm editId={id
 export default function App() {
   return (
     <LangProvider>
+      <ErrorBoundary>
       <ToastProvider>
         <ConfirmProvider>
           <BrowserRouter>
@@ -62,6 +63,7 @@ export default function App() {
           </BrowserRouter>
         </ConfirmProvider>
       </ToastProvider>
+      </ErrorBoundary>
     </LangProvider>
   );
 }

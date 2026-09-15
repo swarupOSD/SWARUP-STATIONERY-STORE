@@ -1,4 +1,26 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState, ReactNode } from 'react';
+import { Component, createContext, useCallback, useContext, useEffect, useRef, useState, ReactNode } from 'react';
+
+/* ---------- error boundary: never a silent white screen ---------- */
+export class ErrorBoundary extends Component<{ children: ReactNode }, { msg: string }> {
+  state = { msg: '' };
+  static getDerivedStateFromError(e: any) { return { msg: String(e?.message || e) }; }
+  componentDidCatch() { /* visible fallback below is the UX */ }
+  render() {
+    if (!this.state.msg) return this.props.children;
+    return (
+      <div style={{ maxWidth: 440, margin: '40px auto', padding: 16 }}>
+        <div className="card" style={{ borderLeft: '4px solid var(--rose-tx)' }}>
+          <h3>😕 Something didn't load</h3>
+          <p style={{ fontSize: 13, wordBreak: 'break-word' }}>{this.state.msg}</p>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn primary" style={{ flex: 1 }} onClick={() => location.reload()}>↻ Reload</button>
+            <button className="btn" style={{ flex: 1 }} onClick={() => { localStorage.clear(); location.href = '/login'; }}>Logout & retry</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+}
 
 /* ---------- formatting ---------- */
 export const rs = (n: any) => `₹${Number(n ?? 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;

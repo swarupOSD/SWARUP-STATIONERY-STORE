@@ -11,6 +11,7 @@ api.interceptors.response.use(
   (e) => {
     if (e.response?.status === 401) {
       localStorage.removeItem('token');
+      localStorage.removeItem('user');
       if (!location.pathname.includes('/login')) location.href = '/login';
     }
     return Promise.reject(e);
