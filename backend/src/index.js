@@ -63,8 +63,13 @@ async function ensureSeed() {
     if (!env.ADMIN_PASSWORD) {
       console.warn('[seed] No ADMIN_PASSWORD set — first admin NOT created. Set ADMIN_USERNAME/ADMIN_PASSWORD env.');
     } else {
-      await User.create({ username: env.ADMIN_USERNAME.toLowerCase().trim(), name: env.ADMIN_NAME, passwordHash: await bcrypt.hash(env.ADMIN_PASSWORD, 10), role: 'ADMIN', permissions: ['*'] });
-      console.log(`[seed] Admin "${env.ADMIN_USERNAME}" created.`);
+      try {
+        await User.create({ username: env.ADMIN_USERNAME.toLowerCase().trim(), name: env.ADMIN_NAME, passwordHash: await bcrypt.hash(env.ADMIN_PASSWORD, 10), role: 'ADMIN', permissions: ['*'] });
+        console.log(`[seed] Admin "${env.ADMIN_USERNAME}" created.`);
+      } catch (e) {
+        if (e.code === 11000) console.log('[seed] Admin already exists (concurrent boot) — continuing.');
+        else throw e;
+      }
     }
   }
 }
