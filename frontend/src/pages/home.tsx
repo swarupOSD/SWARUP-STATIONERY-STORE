@@ -21,6 +21,9 @@ export function Login() {
   return (
     <div style={{ maxWidth: 420, margin: '40px auto' }}>
       <div className="brand"><span style={{ fontSize: 30 }}>🪔</span><div><h1>Swarup Stationery Store</h1><small>স্বরূপ স্টেশনারি স্টোর</small></div></div>
+      {import.meta.env.PROD && !import.meta.env.VITE_API_BASE_URL && (
+        <p className="card" style={{ color: '#856404', background: '#fff3cd' }}>Shop server is not connected yet. The owner needs to set the backend URL and redeploy.</p>
+      )}
       <form onSubmit={submit} className="card" style={{ marginTop: 12 }}>
         <label>Username</label><input value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" />
         <label>Password</label><input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />

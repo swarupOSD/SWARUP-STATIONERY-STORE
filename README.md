@@ -29,6 +29,16 @@ npm install
 npm run dev
 ```
 
+## Live deployment (2026-09-15)
+
+- Frontend (Vercel, project `frontend`, scope `nexoria3`): https://swarup-store-nexoria3.vercel.app
+  - Deploy from `frontend/` dir (Vercel Root Directory = `frontend`); SPA rewrites in `frontend/vercel.json`.
+  - After the Render backend exists: `vercel env add VITE_API_BASE_URL production` (or Dashboard → Project → Settings → Environment Variables), then `vercel deploy --prod --yes` from `frontend/`.
+  - Dashboard → Project → Settings → Deployment Protection → turn OFF "Vercel Authentication" so the shopkeeper can open the app (app has its own JWT login).
+- Backend (Render): create Web Service from this repo — `render.yaml` already defines build/start/health check. Set env vars below. Note required `CLIENT_ORIGIN=https://swarup-store-nexoria3.vercel.app`.
+- Database: MongoDB Atlas `swarup-store`, app user with readWrite, network access for Render; set `MONGO_URI`.
+- Media/AI: Cloudinary + `GEMINI_API_KEY` optional (local-disk fallback dev-only; heuristic voice/invoice parsers otherwise).
+
 Health: `GET /api/health` → `{ ok, time, database }`
 
 ## Required environment (Render backend)

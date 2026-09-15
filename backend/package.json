@@ -26,5 +26,8 @@
     "qrcode": "^1.5.4",
     "undici": "^6.19.2"
   },
-  "devDependencies": {}
+  "devDependencies": {},
+  "engines": {
+    "node": ">=20"
+  }
 }
