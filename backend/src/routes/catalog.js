@@ -13,7 +13,11 @@ router.get('/categories', async (req, res, next) => {
   try {
     let cats = await Category.find({ active: true }).sort({ name: 1 });
     if (!cats.length) {
-      await Category.insertMany(DEFAULTS.map((n) => ({ name: n })));
+      // backfill flag on legacy docs, then seed defaults (race/duplicate safe)
+      await Category.updateMany({ active: { $exists: false } }, { $set: { active: true } });
+      try {
+        await Category.insertMany(DEFAULTS.map((n) => ({ name: n, active: true })), { ordered: false });
+      } catch (e) { if (e.code !== 11000) throw e; }
       cats = await Category.find({ active: true }).sort({ name: 1 });
     }
     res.json(cats);

@@ -48,7 +48,9 @@ app.use((req, res) => res.status(404).json({ error: 'Not found.' }));
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
   console.error('[api-error]', err.message);
-  res.status(err.status || 500).json({ error: err.publicMessage || err.message?.includes('Only PDF') ? err.message : 'Something went wrong. Please try again.' });
+  const isUploadErr = err.message?.includes('Only PDF') || err.message?.includes('File too large') || err.code === 'LIMIT_FILE_SIZE';
+  const status = err.status || (isUploadErr ? 400 : 500);
+  res.status(status).json({ error: err.publicMessage || (isUploadErr || err.status ? err.message : 'Something went wrong. Please try again.') });
 });
 
 async function ensureSeed() {

@@ -38,6 +38,7 @@ export function Sell() {
   const [qr, setQr] = useState<any>(null);
   const [done, setDone] = useState<any>(null);
   const [showPay, setShowPay] = useState(false);
+  const [showCust, setShowCust] = useState(false);
 
   useEffect(() => { localStorage.setItem('cart', JSON.stringify(cart)); }, [cart]);
   useEffect(() => { api.get('/api/categories').then((r) => setCats(r.data)).catch(() => {}); }, []);
@@ -82,7 +83,11 @@ export function Sell() {
 
   const fetchQr = async (amount: number) => {
     try { const { data } = await api.get('/api/upi-qr', { params: { amount } }); setQr(data); }
-    catch (e: any) { setQr({ error: errMsg(e) }); }
+    catch (e: any) {
+      const fb = e?.response?.data?.fallbackQr;
+      if (fb) setQr({ staticOnly: true, qr: fb, amount });
+      else setQr({ error: errMsg(e) });
+    }
   };
 
   const checkout = async () => {
@@ -106,7 +111,7 @@ export function Sell() {
       });
       setDone(data); setCart([]); localStorage.removeItem('cart');
       setReceived(''); setMix({ CASH: '', UPI: '', BANK: '' }); setDisc(''); setDiscPct('');
-      setCustomer(null); setNewCust(''); setShowPay(false);
+      setCustomer(null); setNewCust(''); setShowCust(false); setShowPay(false);
       toast(`Sale completed ✓ ${data.receiptNumber}`, 'ok');
       if (method === 'UPI') fetchQr(data.total);
     } catch (e: any) { toast(errMsg(e), 'err'); } finally { setBusy(false); }
@@ -210,7 +215,7 @@ export function Sell() {
               {Math.abs(mixSum - total) < 0.01 && total > 0 && <span className="badge-ok">✓ Balanced</span>}
             </div>
           )}
-          {(method === 'DUE' || customer) && (
+          {(method === 'DUE' || customer || showCust) && (
             <div>
               <label>Customer {method === 'DUE' ? '(required)' : '(optional)'}</label>
               {customer ? (
@@ -230,21 +235,23 @@ export function Sell() {
               )}
             </div>
           )}
-          {method !== 'DUE' && !customer && (
-            <button className="btn sm ghost" style={{ marginTop: 8 }} onClick={() => (document.querySelector<HTMLInputElement>('input[placeholder="Search customer…"]') as any)?.focus()}>+ Attach customer (optional)</button>
+          {method !== 'DUE' && !customer && !showCust && (
+            <button className="btn sm ghost" style={{ marginTop: 8 }} onClick={() => setShowCust(true)}>+ Attach customer (optional)</button>
           )}
           <button className="btn primary block" style={{ marginTop: 12 }} onClick={checkout} disabled={busy}>{busy ? 'Saving…' : `✓ Complete • ${rs(total)}`}</button>
         </Sheet>
       )}
 
       {qr && !qr.error && qr.qr && (
-        <Sheet title={`Scan to pay ${rs(qr.amount)}`} onClose={() => setQr(null)}>
+        <Sheet title={qr.staticOnly ? `Shop QR — collect ${rs(qr.amount)}` : `Scan to pay ${rs(qr.amount)}`} onClose={() => setQr(null)}>
           <div style={{ textAlign: 'center' }}><img src={qr.qr} alt="UPI QR" style={{ width: 220, borderRadius: 12, border: '1px solid var(--line)' }} />
-            <p><b>{qr.upiId}</b></p>
-            <p><small>Customer scans & pays → you confirm money received, then Complete.</small></p></div>
+            <p><b>{qr.upiId || 'Shop QR'}</b></p>
+            <p><small>{qr.staticOnly ? 'Static QR — customer types the amount. Confirm money received, then Complete.' : 'Customer scans & pays → you confirm money received, then Complete.'}</small></p>
+            {qr.fallbackQr && !qr.staticOnly && <p><small>Fallback shop QR on file ✓</small></p>}
+          </div>
         </Sheet>
       )}
-      {qr?.error && <Sheet title="QR unavailable" onClose={() => setQr(null)}><p>{qr.error}</p></Sheet>}
+      {qr?.error && <Sheet title="QR unavailable" onClose={() => setQr(null)}><p>{qr.error}</p><p><small>Fix: Settings → UPI & QR → paste your UPI ID and/or upload your PhonePe QR photo. Then this screen shows the QR automatically.</small></p><a className="btn gold block" href="/settings">⚙️ Open settings</a></Sheet>}
 
       {done && <ReceiptSheet sale={done} onClose={() => { setDone(null); setQr(null); }} />}
     </div>

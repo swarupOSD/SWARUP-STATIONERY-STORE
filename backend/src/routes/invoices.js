@@ -87,6 +87,9 @@ router.post('/upload', upload.single('bill'), async (req, res, next) => {
     }
 
     const mathIssues = validateInvoiceMath(inv);
+    if (!inv.items?.length) {
+      return res.status(422).json({ error: 'No items found in this bill.', hint: 'For Flipkart use the downloaded invoice PDF. For photos, paste the bill text (name qty × rate) and upload again, or add the purchase manually.' });
+    }
     const fp = crypto.createHash('sha256').update(`${(inv.supplier || '').toLowerCase()}|${(inv.invoiceNumber || '').toLowerCase()}|${(inv.orderNumber || '').toLowerCase()}|${Number(inv.grandTotal || 0)}`).digest('hex');
     const or = [{ fingerprint: fp, status: 'COMPLETED' }];
     if ((inv.invoiceNumber || inv.orderNumber) && inv.supplier) {
