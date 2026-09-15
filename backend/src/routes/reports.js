@@ -4,6 +4,7 @@ const Purchase = require('../models/Purchase');
 const Payment = require('../models/Payment');
 const Product = require('../models/Product');
 const Customer = require('../models/Customer');
+const Supplier = require('../models/Supplier');
 const { Settings } = require('../models/Misc');
 const { auth } = require('../middleware/auth');
 const { istParts, todayIST, prettyDateIST } = require('../utils/ist');
@@ -112,6 +113,7 @@ router.get('/export/:type', async (req, res, next) => {
   try {
     if (req.user.role !== 'ADMIN') return res.status(403).json({ error: 'Admin only.' });
     const { type } = req.params;
+    if (type === 'all') return fullBackup(req, res, next);
     const { format = 'json' } = req.query;
     const Models = { sales: Sale, purchases: Purchase, payments: Payment, products: Product, customers: Customer };
     const M = Models[type];
@@ -127,6 +129,48 @@ router.get('/export/:type', async (req, res, next) => {
     res.json(rows);
   } catch (e) { next(e); }
 });
+
+// Dead stock: active products with stock that haven't sold in N days.
+router.get('/dead-stock', async (req, res, next) => {
+  try {
+    const days = Math.min(365, Math.max(7, parseInt(req.query.days, 10) || 30));
+    const since = new Date(Date.now() - days * 86400000);
+    const soldIds = await Sale.distinct('items.productId', { status: 'COMPLETED', createdAt: { $gte: since } });
+    const set = new Set(soldIds.map(String));
+    const stocked = await Product.find({ active: true, stock: { $gt: 0 } }).select('name stock sellingPrice purchasePrice packSize category').lean();
+    const lastSold = await Sale.aggregate([
+      { $match: { status: 'COMPLETED' } },
+      { $unwind: '$items' },
+      { $group: { _id: '$items.productId', last: { $max: '$createdAt' } } },
+    ]);
+    const lastMap = new Map(lastSold.map((x) => [String(x._id), x.last]));
+    const dead = stocked
+      .filter((p) => !set.has(String(p._id)))
+      .map((p) => ({
+        _id: p._id, name: p.name, category: p.category, stock: p.stock,
+        stockValue: Math.round(p.stock * (p.purchasePrice / Math.max(1, p.packSize || 1))),
+        lastSold: lastMap.get(String(p._id)) || null,
+      }))
+      .sort((a, b) => b.stockValue - a.stockValue);
+    res.json({ days, count: dead.length, value: dead.reduce((s, x) => s + x.stockValue, 0), items: dead.slice(0, 200) });
+  } catch (e) { next(e); }
+});
+
+// Full JSON backup (admin): all business collections in one file.
+async function fullBackup(req, res, next) {
+  try {
+    const { SupplierPayment, Return } = require('../models/Dues');
+    const pick = (q) => q.limit(5000).lean();
+    const [products, customers, sales, purchases, payments, suppliers, categories, supplierPayments, returns] = await Promise.all([
+      pick(Product.find()), pick(Customer.find()), pick(Sale.find()), pick(Purchase.find()), pick(Payment.find()),
+      pick(Supplier.find()), pick(require('../models/Category').find()), pick(SupplierPayment.find()), pick(Return.find()),
+    ]);
+    const settings = await Settings.findOne({ key: 'shop' }).lean();
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="swarup-backup-${todayIST()}.json"`);
+    res.json({ app: 'swarup-store', version: 1, exportedAt: new Date().toISOString(), settings, products, customers, sales, purchases, payments, suppliers, categories, supplierPayments, returns });
+  } catch (e) { next(e); }
+}
 
 module.exports = router;
 module.exports.dailySummary = dailySummary;

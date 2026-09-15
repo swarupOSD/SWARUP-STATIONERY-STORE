@@ -77,8 +77,30 @@ export function Reports() {
             <a className="btn sm gold" href={`/api/reports/daily.pdf?date=${date}`} target="_blank" rel="noreferrer">📄 Daily PDF</a>
             <a className="btn sm" href="/api/reports/export/sales?format=csv" target="_blank" rel="noreferrer">⬇ Sales CSV</a>
             <a className="btn sm" href="/api/reports/export/sales?format=json" target="_blank" rel="noreferrer">⬇ JSON</a>
+            <a className="btn sm green" href={`https://wa.me/?text=${encodeURIComponent(`🪔 *Swarup Stationery Store* — ${d.prettyDate || date}\nSales: ₹${d.totalSales} | Profit: ₹${d.grossProfit}\nCash: ₹${d.cash} | UPI: ₹${d.upi}\nDue given: ₹${d.dueGiven} | Collected: ₹${d.dueCollected}\nBills: ${d.numSales}`)}`} target="_blank" rel="noreferrer">💬 WhatsApp</a>
           </div>
+          <DeadStock />
         </div>
+      )}
+    </div>
+  );
+}
+
+function DeadStock() {
+  const [days, setDays] = useState(30);
+  const [data, setData] = useState<any>(null);
+  useEffect(() => { api.get('/api/reports/dead-stock', { params: { days } }).then((r) => setData(r.data)).catch(() => {}); }, [days]);
+  return (
+    <div style={{ marginTop: 6 }}>
+      <div className="section-t">💤 Dead stock — not sold in {days} days</div>
+      <div className="chips">{[30, 60, 90].map((v) => <button key={v} className={`chip${days === v ? ' on' : ''}`} onClick={() => setDays(v)}>{v} days</button>)}</div>
+      {!data ? <Skel n={2} /> : data.count === 0 ? <div className="card" style={{ borderLeft: '4px solid var(--green)' }}>✅ Everything in stock is moving.</div> : (
+        <>
+          <div className="card kpi"><small>💤 Stuck value</small><br /><b>{rs(data.value)}</b><div className="sub">{data.count} products — put on offer / stop reordering</div></div>
+          <div className="table-wrap" style={{ marginTop: 8 }}><table><thead><tr><th>Product</th><th>Stock</th><th>Value</th><th>Last sold</th></tr></thead>
+            <tbody>{data.items.slice(0, 20).map((p: any) => <tr key={p._id}><td>{p.name}</td><td>{p.stock}</td><td>{rs(p.stockValue)}</td><td>{p.lastSold ? new Date(p.lastSold).toLocaleDateString('en-IN') : 'never'}</td></tr>)}</tbody>
+          </table></div>
+        </>
       )}
     </div>
   );

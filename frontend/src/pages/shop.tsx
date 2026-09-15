@@ -129,7 +129,7 @@ export function Khata() {
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
-  const [nm, setNm] = useState(''); const [ph, setPh] = useState('');
+  const [nm, setNm] = useState(''); const [ph, setPh] = useState(''); const [lim, setLim] = useState('');
   const load = async () => {
     setLoading(true);
     try { const { data } = await api.get('/api/customers', { params: { q, filter, limit: 100 } }); setItems(data.items); }
@@ -138,7 +138,7 @@ export function Khata() {
   useEffect(() => { load(); }, [filter]);
   const addCust = async () => {
     if (!nm.trim()) { toast('Enter customer name', 'err'); return; }
-    try { await api.post('/api/customers', { name: nm.trim(), phone: ph.trim() }); setNm(''); setPh(''); setShowAdd(false); toast('Customer added ✓', 'ok'); load(); }
+    try { await api.post('/api/customers', { name: nm.trim(), phone: ph.trim(), creditLimit: Number(lim || 0) }); setNm(''); setPh(''); setLim(''); setShowAdd(false); toast('Customer added ✓', 'ok'); load(); }
     catch (e: any) { toast(errMsg(e), 'err'); }
   };
   const totalDue = items.reduce((s, c) => s + (c.totalDue || 0), 0);
@@ -158,7 +158,7 @@ export function Khata() {
         items.map((c) => (
           <a key={c._id} href={`/khata/${c._id}`} className="lrow">
             <Avatar name={c.name} gold={c.totalDue > 0} />
-            <div className="grow"><b className="t">{c.name}</b><small>{c.phone || '—'} • bought {rs(c.totalPurchased)}</small></div>
+            <div className="grow"><b className="t">{c.name}</b><small>{c.phone || '—'} • bought {rs(c.totalPurchased)}{c.creditLimit > 0 ? ` • limit ${rs(c.creditLimit)}` : ''}</small></div>
             <div style={{ textAlign: 'right' }}><div className={`due-amt ${c.totalDue > 0 ? 'neg' : 'zero'}`}>{c.totalDue > 0 ? rs(c.totalDue) : '✓ Paid'}</div></div>
           </a>
         ))}
@@ -166,6 +166,7 @@ export function Khata() {
         <Sheet title="New customer" onClose={() => setShowAdd(false)}>
           <label>Name *</label><input value={nm} onChange={(e) => setNm(e.target.value)} placeholder="e.g. Rahul" />
           <label>Phone (for call / WhatsApp)</label><input value={ph} onChange={(e) => setPh(e.target.value)} inputMode="tel" placeholder="98XXXXXXXX" />
+          <label>Credit limit ₹ (0 = unlimited due)</label><input value={lim} onChange={(e) => setLim(e.target.value)} inputMode="numeric" placeholder="e.g. 500" />
           <button className="btn primary block" style={{ marginTop: 12 }} onClick={addCust}>✓ Add to Khata</button>
         </Sheet>
       )}
@@ -178,6 +179,9 @@ export function CustomerDetail({ id }: { id: string }) {
   const [d, setD] = useState<any>(null);
   const [tab, setTab] = useState<'all' | 'dues' | 'payments'>('all');
   const [showPay, setShowPay] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
+  const [eLim, setELim] = useState('');
+  const [ePhone, setEPhone] = useState('');
   const [amt, setAmt] = useState('');
   const [method, setMethod] = useState('CASH');
   const [ref, setRef] = useState('');
@@ -198,7 +202,19 @@ export function CustomerDetail({ id }: { id: string }) {
       <PageHead title={c.name} emoji="👤">
         {c.phone && <a className="btn sm" href={`tel:${c.phone}`}>📞 Call</a>}
         {c.phone && <a className="btn sm green" href={waLink(c.phone, reminder)} target="_blank" rel="noreferrer">💬 Remind</a>}
+        <button className="btn sm ghost" onClick={() => { setELim(String(c.creditLimit || '')); setEPhone(c.phone || ''); setShowEdit(true); }}>✏️</button>
       </PageHead>
+      {c.creditLimit > 0 && <div className={`card`} style={{ borderLeft: `4px solid ${c.totalDue >= c.creditLimit ? 'var(--rose-tx)' : 'var(--gold)'}` }}><small>💳 Credit limit {rs(c.creditLimit)} • available {rs(Math.max(0, c.creditLimit - c.totalDue))}</small></div>}
+      {showEdit && (
+        <Sheet title={`Edit ${c.name}`} onClose={() => setShowEdit(false)}>
+          <label>Phone</label><input value={ePhone} onChange={(e) => setEPhone(e.target.value)} inputMode="tel" />
+          <label>Credit limit ₹ (0 = unlimited)</label><input value={eLim} onChange={(e) => setELim(e.target.value)} inputMode="numeric" />
+          <button className="btn primary block" style={{ marginTop: 12 }} onClick={async () => {
+            try { await api.patch(`/api/customers/${id}`, { phone: ePhone.trim(), creditLimit: Number(eLim || 0) }); toast('Saved ✓', 'ok'); setShowEdit(false); load(); }
+            catch (e: any) { toast(errMsg(e), 'err'); }
+          }}>✓ Save</button>
+        </Sheet>
+      )}
       <div className="cards quad">
         <div className="card kpi"><small>🛒 Bought</small><br /><b>{rs(c.totalPurchased)}</b></div>
         <div className="card kpi green"><small>💰 Paid</small><br /><b>{rs(c.totalPaid)}</b></div>

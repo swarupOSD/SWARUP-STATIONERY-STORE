@@ -14,6 +14,7 @@ const router = express.Router();
 router.use(auth);
 
 const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+const rs0 = (n) => `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
 
 async function assertDayOpen(dateStr) {
   const d = await DailyClosing.findOne({ date: dateStr });
@@ -105,6 +106,12 @@ router.post('/', requirePerm('sales.create'), async (req, res, next) => {
     } else if (due > 0) {
       if (!customerName) return res.status(400).json({ error: 'Select or create a customer for due sale.' });
       customer = await Customer.create({ name: String(customerName).trim() });
+    }
+    if (customer && due > 0 && Number(customer.creditLimit) > 0 && customer.totalDue + due - Number(customer.creditLimit) > 0.01) {
+      const e = new Error('credit-limit');
+      e.status = 400;
+      e.publicMessage = `${customer.name} er due limit ${rs0(customer.creditLimit)} — ekhon due ${rs0(customer.totalDue)}, aro ${rs0(due)} dile limit cross korbe. Age payment nin ba limit baran.`;
+      throw e;
     }
 
     const profit = round2(subtotal - disc - totalCost);

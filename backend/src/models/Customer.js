@@ -8,6 +8,7 @@ const CustomerSchema = new mongoose.Schema({
   totalPurchased: { type: Number, default: 0 },
   totalPaid: { type: Number, default: 0 },
   totalDue: { type: Number, default: 0 },
+  creditLimit: { type: Number, default: 0, min: 0 }, // 0 = no limit; DUE sales blocked beyond this
 }, { timestamps: true });
 
 CustomerSchema.index({ name: 'text', phone: 'text' });

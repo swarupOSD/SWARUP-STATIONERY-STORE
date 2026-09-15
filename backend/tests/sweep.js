@@ -184,8 +184,7 @@ async function check(name, fn) {
       const rep = await call('GET', '/api/reports/today');
       assert.ok(rep.data.returnsCount >= 2, 'returns counted');
     });
-    await check('supplier dues + FIFO pay', async () => {
-      const inv = 'SWSUP-' + Date.now();
+    await check('supplier dues + FIFO pay', async () => {      const inv = 'SWSUP-' + Date.now();
       const p1 = await call('POST', '/api/purchases', { supplier: 'Sweep Supplier', invoiceNumber: inv + 'A', items: [{ name: 'Sweep Test Pen', productId: global.__pid, qty: 10, baseQty: 10, unitPrice: 8, lineTotal: 80 }], paid: 0, addToStock: false });
       assert.equal(p1.status, 201);
       const p2 = await call('POST', '/api/purchases', { supplier: 'Sweep Supplier', invoiceNumber: inv + 'B', items: [{ name: 'Sweep Test Pen', productId: global.__pid, qty: 10, baseQty: 10, unitPrice: 8, lineTotal: 80 }], paid: 30, addToStock: false });
@@ -202,6 +201,22 @@ async function check(name, fn) {
       const led = await call('GET', '/api/suppliers/ledger?name=Sweep Supplier');
       assert.equal(led.data.due, 30);
       assert.equal(led.data.payments.length, 1);
+    });
+    await check('credit limit blocks due sale', async () => {
+      const c = await call('POST', '/api/customers', { name: 'Sweep Limit', creditLimit: 50 });
+      assert.equal(c.status, 201);
+      const blocked = await call('POST', '/api/sales', { items: [{ productId: global.__pid, qty: 10 }], paymentMethod: 'DUE', paid: 0, customerId: c.data._id, idempotencyKey: 'sw-lim-' + Date.now() });
+      assert.equal(blocked.status, 400);
+      const ok = await call('POST', '/api/sales', { items: [{ productId: global.__pid, qty: 3 }], paymentMethod: 'DUE', paid: 0, customerId: c.data._id, idempotencyKey: 'sw-lim2-' + Date.now() });
+      assert.equal(ok.status, 201);
+      const upd = await call('PATCH', `/api/customers/${c.data._id}`, { creditLimit: 500 });
+      assert.equal(upd.status, 200); assert.equal(upd.data.creditLimit, 500);
+    });
+    await check('dead stock + backup (admin)', async () => {
+      const dz = await call('GET', '/api/reports/dead-stock?days=30');
+      assert.equal(dz.status, 200); assert.ok('items' in dz.data);
+      const bk = await call('GET', '/api/reports/export/all');
+      assert.equal(bk.status, 200); assert.ok(Array.isArray(bk.data.products) && Array.isArray(bk.data.sales));
     });
   }
 

@@ -26,16 +26,27 @@ router.get('/', async (req, res, next) => {
 
 router.post('/', requirePerm('customers.create'), async (req, res, next) => {
   try {
-    const { name, phone = '', address = '', notes = '' } = req.body;
+    const { name, phone = '', address = '', notes = '', creditLimit = 0 } = req.body;
     if (!name) return res.status(400).json({ error: 'Customer name is required.' });
-    const c = await Customer.create({ name: String(name).trim(), phone, address, notes });
+    const c = await Customer.create({ name: String(name).trim(), phone, address, notes, creditLimit: Math.max(0, Number(creditLimit || 0)) });
     await audit(req.user, 'CUSTOMER_CREATED', 'customer', c._id, { name: c.name });
     res.status(201).json(c);
   } catch (e) { next(e); }
 });
 
-router.get('/:id', async (req, res, next) => {
+router.patch('/:id', requirePerm('customers.create'), async (req, res, next) => {
   try {
+    const c = await Customer.findById(req.params.id);
+    if (!c) return res.status(404).json({ error: 'Customer not found.' });
+    for (const k of ['name', 'phone', 'address', 'notes']) if (req.body[k] !== undefined) c[k] = req.body[k];
+    if (req.body.creditLimit !== undefined) c.creditLimit = Math.max(0, Number(req.body.creditLimit || 0));
+    await c.save();
+    await audit(req.user, 'CUSTOMER_UPDATED', 'customer', c._id, { name: c.name });
+    res.json(c);
+  } catch (e) { next(e); }
+});
+
+router.get('/:id', async (req, res, next) => {  try {
     const c = await Customer.findById(req.params.id);
     if (!c) return res.status(404).json({ error: 'Customer not found.' });
     const [sales, payments] = await Promise.all([

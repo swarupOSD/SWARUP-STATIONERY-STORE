@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api, { errMsg } from '../api/client';
 import { useLang } from '../i18n/lang';
-import { Avatar, Clock, Empty, PageHead, Skel, Stat, getJSON, greeting, rs } from '../components/ui';
+import { Avatar, Clock, Empty, HBarChart, PageHead, Skel, Stat, getJSON, greeting, rs } from '../components/ui';
 
 export function Login() {
   const [username, setUsername] = useState('');
@@ -43,6 +43,8 @@ export function Home() {
   const [data, setData] = useState<any>(null);
   const [dash, setDash] = useState<any>(null);
   const [pricingCt, setPricingCt] = useState(0);
+  const [week, setWeek] = useState<any[]>([]);
+  const [dayOpen, setDayOpen] = useState<boolean | null>(null);
   const [err, setErr] = useState('');
   const nav = useNavigate();
   const user = getJSON('user', {} as any);
@@ -50,6 +52,11 @@ export function Home() {
     api.get('/api/reports/today').then((r) => setData(r.data)).catch((e) => setErr(errMsg(e)));
     api.get('/api/dashboard').then((r) => setDash(r.data)).catch(() => {});
     api.get('/api/products', { params: { needsPricing: '1', limit: 1 } }).then((r) => setPricingCt(r.data.total)).catch(() => {});
+    const to = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    const fromD = new Date(new Date(to).getTime() - 6 * 86400000);
+    const from = fromD.toISOString().slice(0, 10);
+    api.get('/api/reports/daily', { params: { from, to } }).then((r) => setWeek(r.data)).catch(() => {});
+    api.get(`/api/day/${to}`).then((r) => setDayOpen(!r.data.closed)).catch(() => {});
   }, []);
   const hour = new Date().toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit' });
   return (
@@ -60,7 +67,7 @@ export function Home() {
         <button className="btn sm" onClick={() => setLang(lang === 'en' ? 'bn' : 'en')}>{lang === 'en' ? 'বাংলা' : 'English'}</button>
       </div>
       <div className="puja-banner">✦ শুভ শারদীয়া ✦</div>
-      <p className="greet">{greeting()}, <b>{user?.name || 'Shopkeeper'}</b> 🙏</p>
+      <p className="greet">{greeting()}, <b>{user?.name || 'Shopkeeper'}</b> 🙏 {dayOpen !== null && (dayOpen ? <span className="badge-ok">🔓 Day open</span> : <span className="badge-out">🔒 Day closed</span>)}</p>
       <Clock />
       {err && <p style={{ color: 'var(--rose-tx)' }}>{err}</p>}
       {!data ? <Skel n={2} /> : (
@@ -81,6 +88,12 @@ export function Home() {
           </div>
         </>
       )}
+      {week.length > 0 && (
+        <div className="card" style={{ cursor: 'pointer' }} onClick={() => nav('/reports')}>
+          <div style={{ display: 'flex', alignItems: 'center' }}><b style={{ flex: 1, fontSize: 14 }}>📊 Last 7 days</b><small style={{ color: 'var(--muted)' }}>tap for reports ›</small></div>
+          <HBarChart data={week.map((w: any) => ({ label: String(w.date).slice(8), value: w.totalSales }))} />
+        </div>
+      )}
       <div className="action-grid">
         <button className="btn primary" onClick={() => nav('/sell')}><span className="e">🛒</span>{t('sell')}</button>
         <button className="btn" onClick={() => nav('/purchase')}><span className="e">📦</span>{t('purchase')}</button>
@@ -92,8 +105,7 @@ export function Home() {
         <button className="btn" onClick={() => nav('/invoices')}><span className="e">📸</span>{t('uploadBill')}</button>
       </div>
 
-      <div className="section-t">⚠️ Needs attention</div>
-      {!dash ? <Skel n={2} /> : (
+      <div className="section-t">⚠️ Needs attention</div>      {!dash ? <Skel n={2} /> : (
         <>
           {(dash.lowItems || []).length === 0 && (dash.topDue || []).length === 0 && pricingCt === 0 && (
             <div className="card" style={{ borderLeft: '4px solid var(--green)' }}>✅ All good — no low stock, no pending dues.</div>

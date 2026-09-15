@@ -5,7 +5,7 @@ import { Scanner, VoiceSale } from '../components/scan';
 import { useLang } from '../i18n/lang';
 
 type CartLine = { productId: string; name: string; qty: number; rate: number; stock: number; unit: string };
-type Customer = { _id: string; name: string; phone?: string; totalDue: number };
+type Customer = { _id: string; name: string; phone?: string; totalDue: number; creditLimit?: number };
 
 const METHODS = [
   { v: 'CASH', label: '💵 Cash' }, { v: 'UPI', label: '📱 UPI' },
@@ -200,6 +200,10 @@ export function Sell() {
             <div>
               <label>Cash received</label>
               <input placeholder={`Total ${rs(total)}`} value={received} onChange={(e) => setReceived(e.target.value)} inputMode="decimal" />
+              <div className="chips" style={{ marginTop: 8 }}>
+                <button className="chip" onClick={() => setReceived(String(total))}>Exact {rs(total)}</button>
+                {[50, 100, 200, 500, 1000].filter((v) => v >= total).slice(0, 4).map((v) => <button key={v} className="chip" onClick={() => setReceived(String(v))}>₹{v}</button>)}
+              </div>
               {received && <div className="change-box">Return change: {rs(change)}</div>}
             </div>
           )}
@@ -219,7 +223,12 @@ export function Sell() {
             <div>
               <label>Customer {method === 'DUE' ? '(required)' : '(optional)'}</label>
               {customer ? (
-                <div className="lrow"><Avatar name={customer.name} /><div className="grow"><b className="t">{customer.name}</b><small>Due {rs(customer.totalDue)}</small></div><button className="btn sm ghost" onClick={() => setCustomer(null)}>✕</button></div>
+                <div>
+                  <div className="lrow"><Avatar name={customer.name} /><div className="grow"><b className="t">{customer.name}</b><small>Due {rs(customer.totalDue)}{(customer.creditLimit || 0) > 0 ? ` • limit ${rs(customer.creditLimit)}` : ''}</small></div><button className="btn sm ghost" onClick={() => setCustomer(null)}>✕</button></div>
+                  {method === 'DUE' && (customer.creditLimit || 0) > 0 && customer.totalDue + total > (customer.creditLimit || 0) && (
+                    <p style={{ color: 'var(--rose-tx)' }}>⚠ Limit cross hobe ({rs(customer.totalDue + total)} / {rs(customer.creditLimit)}). Age payment nin.</p>
+                  )}
+                </div>
               ) : (
                 <>
                   <input placeholder="Search customer…" value={custQ} onChange={(e) => findCustomers(e.target.value)} />
@@ -260,11 +269,16 @@ export function Sell() {
 
 export function ReceiptSheet({ sale, onClose }: { sale: any; onClose: () => void }) {
   const toast = useToast();
+  const [thermal, setThermal] = useState(false);
   const waText = `🧾 *Swarup Stationery Store*\nReceipt: ${sale.receiptNumber}\n${sale.items.map((i: any) => `• ${i.name} x${i.qty} = ₹${i.lineTotal}`).join('\n')}\nTotal: ₹${sale.total} | Paid: ₹${sale.paid}${sale.due ? ` | Due: ₹${sale.due}` : ''}\nThank you! Visit again 🙏 ধন্যবাদ!`;
+  const rows = `${sale.items.map((i: any) => `<div class="r"><span>${i.name} x${i.qty}</span><span>Rs.${i.lineTotal}</span></div>`).join('')}`;
   const print = () => {
     const w = window.open('', '_blank', 'width=420');
     if (!w) { toast('Popup blocked — allow popups to print', 'err'); return; }
-    w.document.write(`<html><head><title>${sale.receiptNumber}</title><style>body{font-family:monospace;padding:16px}h3{text-align:center}.r{display:flex;justify-content:space-between}hr{border-top:2px dashed #999}</style></head><body><h3>🪔 Swarup Stationery Store</h3><p style="text-align:center">${sale.receiptNumber}<br>${sale.transactionDate} ${sale.transactionTime} IST<br>Customer: ${sale.customerName}</p><hr>${sale.items.map((i: any) => `<div class="r"><span>${i.name} x${i.qty}</span><span>₹${i.lineTotal}</span></div>`).join('')}<hr><div class="r"><b>Total</b><b>₹${sale.total}</b></div><div class="r"><span>Paid (${sale.paymentMethod})</span><span>₹${sale.paid}</span></div>${sale.due ? `<div class="r"><span>Due</span><span>₹${sale.due}</span></div>` : ''}${sale.change ? `<div class="r"><span>Change</span><span>₹${sale.change}</span></div>` : ''}<p style="text-align:center">Thank you! Visit again 🙏</p><script>onload=()=>{print();}</script></body></html>`);
+    const body = thermal
+      ? `<style>@page{size:80mm auto;margin:2mm}body{font-family:monospace;font-size:11px;width:72mm;margin:0;padding:2mm;color:#000}h3{font-size:13px;text-align:center;margin:2px 0}.c{text-align:center}.r{display:flex;justify-content:space-between}hr{border-top:1px dashed #000;margin:4px 0}</style>`
+      : `<style>body{font-family:monospace;padding:16px}h3{text-align:center}.r{display:flex;justify-content:space-between}hr{border-top:2px dashed #999}</style>`;
+    w.document.write(`<html><head><title>${sale.receiptNumber}</title>${body}</head><body><h3>Swarup Stationery Store</h3><p class="c">${sale.receiptNumber}<br>${sale.transactionDate} ${sale.transactionTime} IST<br>Customer: ${sale.customerName}</p><hr>${rows}<hr><div class="r"><b>Total</b><b>Rs.${sale.total}</b></div><div class="r"><span>Paid (${sale.paymentMethod})</span><span>Rs.${sale.paid}</span></div>${sale.due ? `<div class="r"><span>Due</span><span>Rs.${sale.due}</span></div>` : ''}${sale.change ? `<div class="r"><span>Change</span><span>Rs.${sale.change}</span></div>` : ''}<p class="c">Thank you! Visit again</p><script>onload=()=>{print();}</script></body></html>`);
     w.document.close();
   };
   return (
@@ -280,7 +294,8 @@ export function ReceiptSheet({ sale, onClose }: { sale: any; onClose: () => void
         {!!sale.change && <div className="rl"><span>Change</span><span>₹{sale.change}</span></div>}
         <div className="rf">Thank you! Visit again 🙏 ধন্যবাদ!</div>
       </div>
-      <div className="btnrow no-print" style={{ marginTop: 12 }}>
+      <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 10 }}><input type="checkbox" checked={thermal} onChange={(e) => setThermal(e.target.checked)} style={{ width: 22 }} /> 🧾 80mm thermal printer</label>
+      <div className="btnrow no-print" style={{ marginTop: 8 }}>
         <button className="btn" onClick={print}>🖨 Print</button>
         <a className="btn" href={`/api/sales/${sale._id}/receipt.pdf`} target="_blank" rel="noreferrer">📄 PDF</a>
         <a className="btn green" href={waLink('', waText)} target="_blank" rel="noreferrer">💬 WhatsApp</a>

@@ -81,12 +81,13 @@ export function Scanner({ onResult }: { onResult: (text: string) => void }) {
 export function VoiceSale({ onParsed }: { onParsed: (items: any[]) => void }) {
   const [listening, setListening] = useState(false);
   const [err, setErr] = useState('');
+  const [lang, setLang] = useState('bn-IN');
   const start = () => {
     if (listening) return;
     const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SR) { setErr('Voice not supported on this browser.'); return; }
     const r = new SR();
-    r.lang = 'bn-IN'; r.interimResults = false;
+    r.lang = lang; r.interimResults = false;
     setListening(true);
     r.onresult = async (e: any) => {
       const text = e.results[0][0].transcript;
@@ -99,5 +100,9 @@ export function VoiceSale({ onParsed }: { onParsed: (items: any[]) => void }) {
     r.onerror = () => { setListening(false); setErr('Could not hear. Try again.'); };
     r.start();
   };
-  return <span><button className="btn" onClick={start}>{listening ? '🎤 Listening…' : '🎤 Voice Sale'}</button>{err && <small> {err}</small>}</span>;
+  return <span style={{ display: 'inline-flex', gap: 4, alignItems: 'center' }}>
+    <button className="btn sm ghost" title="Voice language" onClick={() => setLang(lang === 'bn-IN' ? 'en-IN' : 'bn-IN')}>{lang === 'bn-IN' ? 'বাং' : 'EN'}</button>
+    <button className="btn" onClick={start}>{listening ? '🎤 Listening…' : '🎤 Voice Sale'}</button>
+    {err && <small> {err}</small>}
+  </span>;
 }

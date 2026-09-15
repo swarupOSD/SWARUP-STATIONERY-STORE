@@ -158,10 +158,12 @@ export function Admin() {
           </div>
         )}
       </div>
-      <div className="section-t">📤 Data export</div>
+      <div className="section-t">📤 Data export & backup</div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         {['sales', 'purchases', 'payments', 'products', 'customers'].map((t) => <a key={t} className="btn sm" href={`/api/reports/export/${t}?format=csv`} target="_blank" rel="noreferrer">⬇ {t}</a>)}
+        <a className="btn sm gold" href="/api/reports/export/all" target="_blank" rel="noreferrer">💾 Full backup (JSON)</a>
       </div>
+      <small style={{ color: 'var(--muted)' }}>Save the backup file monthly — products, sales, khata, everything.</small>
       <div className="section-t">🕵️ Audit log</div>
       {audit.length === 0 ? <Empty emoji="🕵️" title="No audit entries" /> :
         <div className="table-wrap"><table><thead><tr><th>When</th><th>Who</th><th>Action</th><th>Detail</th></tr></thead>
