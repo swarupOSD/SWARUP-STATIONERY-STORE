@@ -24,7 +24,7 @@ async function assertDayOpen(dateStr) {
 // POST /api/sales — server calculates everything; idempotent via idempotencyKey
 router.post('/', requirePerm('sales.create'), async (req, res, next) => {
   try {
-    const { items = [], discount = 0, tax = 0, paymentMethod, paymentBreakdown = [], paid, customerId = null, customerName = '', idempotencyKey, upiTxnId = '', receivedAmount } = req.body;
+    const { items = [], discount = 0, tax = 0, paymentMethod, paymentBreakdown = [], paid, customerId = null, customerName = '', idempotencyKey, upiTxnId = '', receivedAmount, soldBy = 'Ami', dueDate = '' } = req.body;
     if (!idempotencyKey) return res.status(400).json({ error: 'idempotencyKey is required.' });
     if (!Array.isArray(items) || !items.length) return res.status(400).json({ error: 'Add at least one product.' });
     if (!paymentMethod) return res.status(400).json({ error: 'Choose a payment method.' });
@@ -72,7 +72,8 @@ router.post('/', requirePerm('sales.create'), async (req, res, next) => {
     // Payments server-validated
     const METHODS = ['CASH','UPI','PHONEPE','GPAY','BANK','OTHER_UPI','DUE','MIXED','OTHER'];
     if (!METHODS.includes(paymentMethod)) return res.status(400).json({ error: 'Invalid payment method.' });
-    let breakdown = (paymentBreakdown || []).map((b) => ({ method: b.method, amount: round2(Number(b.amount || 0)), ref: b.ref || '' }));
+    if (!['Ami', 'Ma', 'Baba'].includes(soldBy)) return res.status(400).json({ error: 'Ke bechlo select koro (Ami/Ma/Baba).' });
+    let breakdown = (paymentBreakdown || []).map((b) => ({ method: b.method, amount: round2(Number(b.amount || 0)), ref: b.ref || '', account: String(b.account || '').slice(0, 60) }));
     let paidAmt = paid !== undefined ? round2(Number(paid)) : round2(breakdown.reduce((s, b) => s + b.amount, 0));
 
     if (paymentMethod === 'MIXED') {
@@ -80,9 +81,9 @@ router.post('/', requirePerm('sales.create'), async (req, res, next) => {
       if (Math.abs(sum - paidAmt) > 0.01 && paid !== undefined) return res.status(400).json({ error: 'Mixed payment breakdown must equal paid amount.' });
       paidAmt = sum;
     } else if (paymentMethod === 'DUE') {
-      if (!breakdown.length) breakdown = [{ method: 'DUE', amount: round2(total - paidAmt), ref: '' }];
+      if (!breakdown.length) breakdown = [{ method: 'DUE', amount: round2(total - paidAmt), ref: '', account: '' }];
     } else {
-      if (!breakdown.length) breakdown = [{ method: paymentMethod === 'OTHER' ? 'OTHER' : paymentMethod, amount: paidAmt || total, ref: upiTxnId }];
+      if (!breakdown.length) breakdown = [{ method: paymentMethod === 'OTHER' ? 'OTHER' : paymentMethod, amount: paidAmt || total, ref: upiTxnId, account: String(req.body.account || '') }];
       if (paid === undefined) paidAmt = total;
     }
     if (paidAmt > total + 0.001 && paymentMethod !== 'CASH') return res.status(400).json({ error: 'Paid amount cannot exceed total (except cash with change).' });
@@ -113,6 +114,11 @@ router.post('/', requirePerm('sales.create'), async (req, res, next) => {
       e.publicMessage = `${customer.name} er due limit ${rs0(customer.creditLimit)} — ekhon due ${rs0(customer.totalDue)}, aro ${rs0(due)} dile limit cross korbe. Age payment nin ba limit baran.`;
       throw e;
     }
+    let dueDateStr = '';
+    if (due > 0 && dueDate) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(dueDate))) return res.status(400).json({ error: 'Due date thik format-e dao (YYYY-MM-DD).' });
+      dueDateStr = String(dueDate);
+    }
 
     const profit = round2(subtotal - disc - totalCost);
     const receiptNumber = await nextReceiptNumber();
@@ -121,7 +127,7 @@ router.post('/', requirePerm('sales.create'), async (req, res, next) => {
       receiptNumber, idempotencyKey, customerId: customer?._id || null, customerName: customer?.name || customerName || 'Walk-in',
       items: saleItems, subtotal, discount: disc, tax: tx, total, paid: paidCapped, due, change,
       paymentMethod, paymentBreakdown: breakdown, upiTxnId, profit, status: 'COMPLETED',
-      cashier: req.user.username, cashierId: req.user._id, transactionDate: date, transactionTime: time, timezone: 'Asia/Kolkata',
+      cashier: req.user.username, cashierId: req.user._id, soldBy, dueDate: dueDateStr, transactionDate: date, transactionTime: time, timezone: 'Asia/Kolkata',
     };
 
     const isTxnUnsupported = (e) => /replica set|transaction numbers|mongos|no longer support transactions/i.test(e?.message || '');

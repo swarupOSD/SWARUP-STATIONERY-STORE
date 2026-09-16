@@ -21,13 +21,14 @@ async function dailySummary(dateStr) {
   const returns = await Return.find({ returnDate: dateStr });
   const expenses = await Expense.find({ expenseDate: dateStr });
   let totalSales = 0, totalCost = 0, discount = 0, cash = 0, upi = 0, bank = 0, dueGiven = 0, itemsSold = 0;
-  const byProduct = new Map(), byHour = new Map(), byMethod = {};
+  const byProduct = new Map(), byHour = new Map(), byMethod = {}, byAccount = {};
   for (const s of sales) {
     totalSales += s.total; discount += s.discount || 0; dueGiven += s.due || 0; itemsSold += s.items.reduce((a, i) => a + i.qty, 0);
     totalCost += s.items.reduce((a, i) => a + (i.lineCost || 0), 0);
     for (const b of s.paymentBreakdown || []) {
       const m = b.method;
       byMethod[m] = (byMethod[m] || 0) + b.amount;
+      if (b.account) byAccount[b.account] = Math.round(((byAccount[b.account] || 0) + b.amount) * 100) / 100;
       if (['CASH'].includes(m)) cash += b.amount;
       else if (['UPI','PHONEPE','GPAY','OTHER_UPI'].includes(m)) upi += b.amount;
       else if (['BANK'].includes(m)) bank += b.amount;
@@ -42,7 +43,10 @@ async function dailySummary(dateStr) {
     byHour.set(hh, (byHour.get(hh) || 0) + s.total);
   }
   let dueCollected = 0;
-  for (const p of payments) dueCollected += p.amount;
+  for (const p of payments) {
+    dueCollected += p.amount;
+    if (p.account) byAccount[p.account] = Math.round(((byAccount[p.account] || 0) + p.amount) * 100) / 100;
+  }
   let returnsTotal = 0, returnsCost = 0, returnsCount = 0;
   for (const r of returns) { returnsTotal += r.refundTotal || 0; returnsCost += r.refundCost || 0; returnsCount += 1; }
   totalSales = Math.round((totalSales - returnsTotal) * 100) / 100;
@@ -60,7 +64,7 @@ async function dailySummary(dateStr) {
     returnsTotal: Math.round(returnsTotal * 100) / 100, returnsCount,
     cash: Math.round(cash * 100) / 100, upi: Math.round(upi * 100) / 100, bank: Math.round(bank * 100) / 100,
     dueGiven: Math.round(dueGiven * 100) / 100, dueCollected: Math.round(dueCollected * 100) / 100,
-    numSales: sales.length, itemsSold, byMethod,
+    numSales: sales.length, itemsSold, byMethod, byAccount,
     byProduct: [...byProduct.values()].map((e) => ({ ...e, profit: Math.round((e.revenue - e.cost) * 100) / 100 })),
     byHour: [...byHour.entries()].sort().map(([h, v]) => ({ hour: h, total: Math.round(v * 100) / 100 })),
   };

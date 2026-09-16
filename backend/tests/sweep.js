@@ -218,8 +218,7 @@ async function check(name, fn) {
       const bk = await call('GET', '/api/reports/export/all');
       assert.equal(bk.status, 200); assert.ok(Array.isArray(bk.data.products) && Array.isArray(bk.data.sales));
     });
-    await check('expenses + net profit + buy list', async () => {
-      const bad = await call('POST', '/api/expenses', { title: '', amount: 0 });
+    await check('expenses + net profit + buy list', async () => {      const bad = await call('POST', '/api/expenses', { title: '', amount: 0 });
       assert.equal(bad.status, 400);
       const e1 = await call('POST', '/api/expenses', { title: 'Sweep rent', category: 'Rent', amount: 100, method: 'CASH' });
       assert.equal(e1.status, 201);
@@ -232,6 +231,36 @@ async function check(name, fn) {
       assert.equal(bl.status, 200); assert.ok('items' in bl.data);
       const del = await call('DELETE', `/api/expenses/${e1.data._id}`);
       assert.equal(del.status, 200);
+    });
+    await check('soldBy + dueDate + account + take + overdue', async () => {
+      const c = await call('POST', '/api/customers', { name: 'Sweep Due' });
+      const s = await call('POST', '/api/sales', { items: [{ productId: global.__pid, qty: 2 }], paymentMethod: 'DUE', paid: 0, customerId: c.data._id, soldBy: 'Ma', dueDate: '2026-09-20', paymentBreakdown: [], idempotencyKey: 'sw-fam-' + Date.now() });
+      assert.equal(s.status, 201);
+      assert.equal(s.data.soldBy, 'Ma');
+      assert.equal(s.data.dueDate, '2026-09-20');
+      const badSeller = await call('POST', '/api/sales', { items: [{ productId: global.__pid, qty: 1 }], paymentMethod: 'CASH', paid: 10, soldBy: 'Kaka', idempotencyKey: 'sw-fam2-' + Date.now() });
+      assert.equal(badSeller.status, 400);
+      const od = await call('GET', '/api/customers/dues/overdue');
+      assert.equal(od.status, 200);
+      // take from stock
+      const stk0 = (await call('GET', `/api/products/${global.__pid}`)).data.stock;
+      const tk = await call('POST', `/api/products/${global.__pid}/take`, { qty: 2, who: 'Baba', reason: 'sweep' });
+      assert.equal(tk.status, 200);
+      assert.equal(tk.data.stock, stk0 - 2);
+      const tkBad = await call('POST', `/api/products/${global.__pid}/take`, { qty: 1, who: 'Kaka' });
+      assert.equal(tkBad.status, 400);
+      // khata payment with account
+      const pay = await call('POST', `/api/customers/${c.data._id}/payments`, { amount: 10, method: 'UPI', account: 'Mar PhonePe' });
+      assert.equal(pay.status, 201); assert.equal(pay.data.payment.account, 'Mar PhonePe');
+      const rep = await call('GET', '/api/reports/today');
+      assert.ok(rep.data.byAccount && rep.data.byAccount['Mar PhonePe'] >= 10, 'account split');
+      // personal with method/account
+      const pp = await call('POST', '/api/personal-purchases', { owner: "Father's Purchase", productName: 'Sweep Rice', qty: 1, price: 50, method: 'UPI', account: 'Babar PhonePe' });
+      assert.equal(pp.status, 201); assert.equal(pp.data.account, 'Babar PhonePe');
+      // new categories seeded
+      const cats = await call('GET', '/api/categories');
+      const names = cats.data.map((x) => x.name);
+      assert.ok(names.includes('Pooja Items') && names.includes('School Supplies'), 'new categories');
     });
   }
 

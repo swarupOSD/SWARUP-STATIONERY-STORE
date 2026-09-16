@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import api, { errMsg } from '../api/client';
-import { Avatar, Empty, PageHead, Seg, Sheet, Skel, rs, useConfirm, useToast, waLink } from '../components/ui';
+import { ACCOUNTS, Avatar, Empty, PageHead, Seg, Sheet, Skel, rs, useConfirm, useToast, waLink } from '../components/ui';
 
 export function Purchase() {
   const toast = useToast();
@@ -130,12 +130,14 @@ export function Khata() {
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [nm, setNm] = useState(''); const [ph, setPh] = useState(''); const [lim, setLim] = useState('');
+  const [overdue, setOverdue] = useState<any[]>([]);
   const load = async () => {
     setLoading(true);
     try { const { data } = await api.get('/api/customers', { params: { q, filter, limit: 100 } }); setItems(data.items); }
     catch (e: any) { toast(errMsg(e), 'err'); } finally { setLoading(false); }
   };
   useEffect(() => { load(); }, [filter]);
+  useEffect(() => { api.get('/api/customers/dues/overdue').then((r) => setOverdue(r.data)).catch(() => {}); }, []);
   const addCust = async () => {
     if (!nm.trim()) { toast('Enter customer name', 'err'); return; }
     try { await api.post('/api/customers', { name: nm.trim(), phone: ph.trim(), creditLimit: Number(lim || 0) }); setNm(''); setPh(''); setLim(''); setShowAdd(false); toast('Customer added ✓', 'ok'); load(); }
@@ -154,6 +156,18 @@ export function Khata() {
         <button className="btn" onClick={load}>Go</button>
       </div>
       <Seg value={filter} onChange={setFilter} options={[{ v: 'all', label: 'All' }, { v: 'due', label: 'Due' }, { v: 'paid', label: 'Paid' }]} />
+      {overdue.length > 0 && (
+        <div style={{ marginTop: 10 }}>
+          <div className="section-t">⏰ Takada — kobe debe chhilo</div>
+          {overdue.slice(0, 6).map((o: any, i: number) => (
+            <a key={i} href={o.customerId ? `/khata/${o.customerId}` : '/khata'} className="lrow" style={o.overdue ? { borderLeft: '3px solid var(--rose-tx)' } : {}}>
+              <Avatar name={o.customerName} gold />
+              <div className="grow"><b className="t">{o.customerName}</b><small>{o.overdue ? `⚠ date par hoye geche (oldest ${o.oldest})` : `📅 debe ${o.oldest}`} • {o.bills.length} bills</small></div>
+              <b className="due-amt neg">{rs(o.due)}</b>
+            </a>
+          ))}
+        </div>
+      )}
       {loading ? <Skel n={4} /> : items.length === 0 ? <Empty emoji="📒" title="No customers" sub="Add your first khata customer." action={<button className="btn primary" onClick={() => setShowAdd(true)}>+ Add customer</button>} /> :
         items.map((c) => (
           <a key={c._id} href={`/khata/${c._id}`} className="lrow">
@@ -176,6 +190,7 @@ export function Khata() {
 
 export function CustomerDetail({ id }: { id: string }) {
   const toast = useToast();
+  const confirm = useConfirm();
   const [d, setD] = useState<any>(null);
   const [tab, setTab] = useState<'all' | 'dues' | 'payments'>('all');
   const [showPay, setShowPay] = useState(false);
@@ -185,13 +200,24 @@ export function CustomerDetail({ id }: { id: string }) {
   const [amt, setAmt] = useState('');
   const [method, setMethod] = useState('CASH');
   const [ref, setRef] = useState('');
+  const [account, setAccount] = useState('Cash Drawer');
   const load = async () => { try { const { data } = await api.get(`/api/customers/${id}`); setD(data); } catch (e: any) { toast(errMsg(e), 'err'); } };
   useEffect(() => { load(); }, [id]);
+  const todayStr = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
   const pay = async () => {
     if (!(Number(amt) > 0)) { toast('Enter amount', 'err'); return; }
     try {
-      await api.post(`/api/customers/${id}/payments`, { amount: Number(amt), method, reference: ref });
+      await api.post(`/api/customers/${id}/payments`, { amount: Number(amt), method, reference: ref, account: method === 'CASH' ? 'Cash Drawer' : account });
       toast(`Received ${rs(Number(amt))} ✓`, 'ok'); setAmt(''); setRef(''); setShowPay(false); load();
+    } catch (e: any) { toast(errMsg(e), 'err'); }
+  };
+  const payFull = async () => {
+    if (!(c.totalDue > 0)) { toast('Kono due nei ✓', 'ok'); return; }
+    if (!await confirm({ title: `Full paid mark korbo?`, body: `${c.name}: ${rs(c.totalDue)} received (${method}${account !== 'Cash Drawer' ? ' • ' + account : ''})`, okText: 'Full paid ✓' })) return;
+    setAmt(String(c.totalDue));
+    try {
+      await api.post(`/api/customers/${id}/payments`, { amount: c.totalDue, method, account: method === 'CASH' ? 'Cash Drawer' : account });
+      toast('Puro paid ✓ Khata clear!', 'ok'); setAmt(''); setShowPay(false); load();
     } catch (e: any) { toast(errMsg(e), 'err'); }
   };
   if (!d) return <div className="page"><Skel n={4} /></div>;
@@ -229,14 +255,14 @@ export function CustomerDetail({ id }: { id: string }) {
       {(tab === 'all' || tab === 'dues') && (d.sales || []).map((s: any) => (
         <div key={s._id} className="lrow">
           <span style={{ fontSize: 22 }}>🧾</span>
-          <div className="grow"><b className="t">{s.receiptNumber} • {s.transactionDate} {s.transactionTime}</b><small>{(s.items || []).map((i: any) => `${i.name}×${i.qty}`).join(', ')}</small></div>
-          <div style={{ textAlign: 'right' }}><b>{rs(s.total)}</b>{s.due > 0 ? <div><span className="badge-out">due {rs(s.due)}</span></div> : <div><span className="badge-ok">paid</span></div>}</div>
+          <div className="grow"><b className="t">{s.receiptNumber} • {s.transactionDate} {s.transactionTime}</b><small>{(s.items || []).map((i: any) => `${i.name}×${i.qty}`).join(', ')}{s.soldBy && s.soldBy !== 'Ami' ? ` • ${s.soldBy} bechlo` : ''}</small></div>
+          <div style={{ textAlign: 'right' }}><b>{rs(s.total)}</b>{s.due > 0 ? <div><span className="badge-out">due {rs(s.due)}</span>{s.dueDate ? <div><small>📅 {s.dueDate}{s.dueDate < todayStr() ? ' • OVERDUE' : ''}</small></div> : null}</div> : <div><span className="badge-ok">paid</span></div>}</div>
         </div>
       ))}
       {(tab === 'all' || tab === 'payments') && (d.payments || []).map((p: any) => (
         <div key={p._id} className="lrow">
           <span style={{ fontSize: 22 }}>💰</span>
-          <div className="grow"><b className="t">{rs(p.amount)} via {p.method}</b><small>{p.paymentDate} {p.paymentTime}{p.reference ? ` • ${p.reference}` : ''}</small></div>
+          <div className="grow"><b className="t">{rs(p.amount)} via {p.method}</b><small>{p.paymentDate} {p.paymentTime}{p.account ? ` • ${p.account}` : ''}{p.reference ? ` • ${p.reference}` : ''}</small></div>
         </div>
       ))}
       {showPay && (
@@ -249,8 +275,11 @@ export function CustomerDetail({ id }: { id: string }) {
           </div>
           <label>Method</label>
           <div className="chips">{['CASH', 'UPI', 'PHONEPE', 'GPAY', 'BANK'].map((m) => <button key={m} className={`chip${method === m ? ' on' : ''}`} onClick={() => setMethod(m)}>{m}</button>)}</div>
+          {method !== 'CASH' && (<><label>Taka kothay dhuklo?</label>
+            <div className="chips">{ACCOUNTS.filter((a) => a !== 'Cash Drawer').map((a) => <button key={a} className={`chip${account === a ? ' on' : ''}`} onClick={() => setAccount(a)}>{a}</button>)}</div></>)}
           <label>UPI ref / note (optional)</label><input value={ref} onChange={(e) => setRef(e.target.value)} placeholder="UTR / remark" />
           <button className="btn primary block" style={{ marginTop: 12 }} onClick={pay}>✓ Save payment</button>
+          {c.totalDue > 0 && <button className="btn green block" style={{ marginTop: 8 }} onClick={payFull}>✓ Puro paid mark koro ({rs(c.totalDue)})</button>}
         </Sheet>
       )}
     </div>

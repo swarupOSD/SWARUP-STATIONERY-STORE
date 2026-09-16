@@ -16,6 +16,7 @@ const PaymentBreakdownSchema = new mongoose.Schema({
   method: { type: String, enum: ['CASH','UPI','PHONEPE','GPAY','BANK','OTHER_UPI','DUE','OTHER'], required: true },
   amount: { type: Number, required: true, min: 0 },
   ref: { type: String, default: '' },
+  account: { type: String, default: '' }, // kar kache taka dhuklo: Cash Drawer / Amar PhonePe / ...
 }, { _id: false });
 
 const SaleSchema = new mongoose.Schema({
@@ -40,6 +41,8 @@ const SaleSchema = new mongoose.Schema({
   returned: [{ productId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product' }, qty: { type: Number, default: 0 } }],
   cashier: { type: String, default: '' },
   cashierId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+  soldBy: { type: String, enum: ['Ami', 'Ma', 'Baba'], default: 'Ami', index: true }, // ke bechlo
+  dueDate: { type: String, default: '' }, // kobe debe (YYYY-MM-DD), due sale-e
   transactionDate: { type: String, required: true, index: true }, // YYYY-MM-DD IST
   transactionTime: { type: String, required: true }, // HH:MM:SS IST
   timezone: { type: String, default: 'Asia/Kolkata' },

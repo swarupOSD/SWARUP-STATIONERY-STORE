@@ -10,20 +10,19 @@ const { istParts } = require('../utils/ist');
 const router = express.Router();
 router.use(auth);
 
-const DEFAULTS = ['Stationery','Grocery','Chocolate','Biscuits','Candy','Cold Drinks','Snacks','Cigarettes','Gutka','Tobacco','Mouth Freshener','Elachi','Personal Care','Household','Other'];
+const DEFAULTS = ['Stationery','Grocery','Chocolate','Biscuits','Candy','Cold Drinks','Snacks','Cigarettes','Gutka','Tobacco','Mouth Freshener','Elachi','Personal Care','Household','Other',
+  // dokaner notun categories — purono DB-te auto-add hobe, kichu delete hobe na
+  'Pen','Notebook','School Supplies','Office Supplies','Art & Craft','Toys','Gifts','Pooja Items','Cosmetics','Medicine & First Aid','Baby Care','Cleaning','Electricals','Batteries & Bulbs','Mobile Accessories','Kitchenware','Festival & Decoration','Books','Magazines','Newspaper','Xerox & Printing','Courier & Services'];
+
 
 router.get('/categories', async (req, res, next) => {
   try {
-    let cats = await Category.find({ active: true }).sort({ name: 1 });
-    if (!cats.length) {
-      // backfill flag on legacy docs, then seed defaults (race/duplicate safe)
-      await Category.updateMany({ active: { $exists: false } }, { $set: { active: true } });
-      try {
-        await Category.insertMany(DEFAULTS.map((n) => ({ name: n, active: true })), { ordered: false });
-      } catch (e) { if (e.code !== 11000) throw e; }
-      cats = await Category.find({ active: true }).sort({ name: 1 });
-    }
-    res.json(cats);
+    // backfill flag on legacy docs, then add any missing defaults (never deletes)
+    await Category.updateMany({ active: { $exists: false } }, { $set: { active: true } });
+    try {
+      await Category.insertMany(DEFAULTS.map((n) => ({ name: n, active: true })), { ordered: false });
+    } catch (e) { if (e.code !== 11000) throw e; }
+    res.json(await Category.find({ active: true }).sort({ name: 1 }));
   } catch (e) { next(e); }
 });
 

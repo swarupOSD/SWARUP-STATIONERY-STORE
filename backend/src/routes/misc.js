@@ -91,10 +91,10 @@ router.get('/personal-purchases', auth, async (req, res, next) => {
 
 router.post('/personal-purchases', auth, async (req, res, next) => {
   try {
-    const { owner, productName, productId = null, qty, price, supplier = '', source = 'Local Shop', paid = 0, billUrl = '', billPublicId = '', addToStock = false } = req.body;
+    const { owner, productName, productId = null, qty, price, supplier = '', source = 'Local Shop', paid = 0, billUrl = '', billPublicId = '', addToStock = false, method = '', account = '' } = req.body;
     if (!owner || !productName || !(qty > 0) || !(price >= 0)) return res.status(400).json({ error: 'Owner, product, qty and price are required.' });
     const { date, time } = istParts();
-    const doc = await PersonalPurchase.create({ owner, productName, productId: productId || null, qty: Number(qty), price: Number(price), total: Number(qty) * Number(price), supplier, source, paid: Number(paid || 0), billUrl, billPublicId, addToStock: Boolean(addToStock), stockApplied: false, purchaseDate: date, purchaseTime: time, createdBy: req.user.username });
+    const doc = await PersonalPurchase.create({ owner, productName, productId: productId || null, qty: Number(qty), price: Number(price), total: Number(qty) * Number(price), supplier, source, paid: Number(paid || 0), method: String(method || ''), account: String(account || '').slice(0, 60), billUrl, billPublicId, addToStock: Boolean(addToStock), stockApplied: false, purchaseDate: date, purchaseTime: time, createdBy: req.user.username });
     if (doc.addToStock && doc.productId) {
       const p = await Product.findById(doc.productId);
       if (p) {

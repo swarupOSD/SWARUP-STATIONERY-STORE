@@ -109,6 +109,8 @@ const PersonalPurchaseSchema = new mongoose.Schema({
   supplier: { type: String, default: '' },
   source: { type: String, default: 'Local Shop' },
   paid: { type: Number, default: 0 },
+  method: { type: String, enum: ['CASH', 'UPI', 'BANK', 'OTHER', ''], default: '' }, // cash na online
+  account: { type: String, default: '' }, // kar account theke gelo: Amar PhonePe / Cash ...
   billUrl: { type: String, default: '' },
   billPublicId: { type: String, default: '' },
   addToStock: { type: Boolean, default: false },

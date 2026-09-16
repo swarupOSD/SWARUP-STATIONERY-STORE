@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import api, { errMsg } from '../api/client';
-import { Avatar, Empty, Img, PageHead, QtyStepper, Sheet, Skel, rs, useConfirm, useDebounce, useToast } from '../components/ui';
+import { SELLERS, Avatar, Empty, Img, PageHead, QtyStepper, Sheet, Skel, rs, useConfirm, useDebounce, useToast } from '../components/ui';
 
 export function Products() {
   const toast = useToast();
@@ -75,6 +75,9 @@ function ProductDetail({ p, onClose }: { p: any; onClose: () => void }) {
   const [delta, setDelta] = useState('');
   const [reason, setReason] = useState('');
   const [counted, setCounted] = useState('');
+  const [takeQty, setTakeQty] = useState('');
+  const [takeWho, setTakeWho] = useState('Ami');
+  const [takeWhy, setTakeWhy] = useState('');
   const [newPrice, setNewPrice] = useState('');
   const [labels, setLabels] = useState(false);
   useEffect(() => { api.get(`/api/products/${p._id}/history`).then((r) => setHist(r.data)).catch(() => {}); }, [p._id]);
@@ -134,6 +137,22 @@ function ProductDetail({ p, onClose }: { p: any; onClose: () => void }) {
         <button className="btn" onClick={setExact}>Set exact</button>
       </div>
       <small style={{ color: 'var(--muted)' }}>Dokane gune ja pelen tai bosan — parthokyo auto-adjust hobe.</small>
+
+      <div className="section-t">🏠 Niye gelam (bari/personal use)</div>
+      <div className="card" style={{ background: '#fff' }}>
+        <label style={{ marginTop: 0 }}>Ke nilo?</label>
+        <div className="chips">{SELLERS.map((s) => <button key={s} className={`chip${takeWho === s ? ' on' : ''}`} onClick={() => setTakeWho(s)}>{s}</button>)}</div>
+        <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+          <input placeholder={`Qty (${p.unit})`} value={takeQty} onChange={(e) => setTakeQty(e.target.value)} inputMode="numeric" />
+          <input placeholder="Keno? (optional)" value={takeWhy} onChange={(e) => setTakeWhy(e.target.value)} />
+        </div>
+        <button className="btn gold block" style={{ marginTop: 8 }} onClick={async () => {
+          if (!(Number(takeQty) > 0)) { toast('Qty dao', 'err'); return; }
+          if (!await confirm({ title: `${takeWho} ${takeQty} ${p.unit} nilo?`, body: `${p.name}: stock ${p.stock} → kombe. Eta sale noy.`, okText: 'Nilo ✓' })) return;
+          try { await api.post(`/api/products/${p._id}/take`, { qty: Number(takeQty), who: takeWho, reason: takeWhy }); toast('Note kora holo ✓', 'ok'); onClose(); }
+          catch (e: any) { toast(errMsg(e), 'err'); }
+        }}>✓ {takeWho} nilo — stock theke bad dao</button>
+      </div>
 
       <div className="section-t">💲 Price history</div>
       {!hist ? <Skel n={1} /> : (hist.price || []).length === 0 ? <small style={{ color: 'var(--muted)' }}>No price changes recorded.</small> : (

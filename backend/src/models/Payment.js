@@ -7,6 +7,7 @@ const PaymentSchema = new mongoose.Schema({
   method: { type: String, enum: ['CASH','UPI','PHONEPE','GPAY','BANK','OTHER_UPI','OTHER'], required: true },
   reference: { type: String, default: '' },
   notes: { type: String, default: '' },
+  account: { type: String, default: '' }, // kothay dhuklo: Cash Drawer / Amar PhonePe / Mar PhonePe / ...
   paymentDate: { type: String, required: true, index: true },
   paymentTime: { type: String, required: true },
   timezone: { type: String, default: 'Asia/Kolkata' },

@@ -63,6 +63,11 @@ export function Reports() {
           <div className="card"><b style={{ fontSize: 14 }}>💳 Payment split</b>
             <SplitBar parts={[{ label: 'Cash', value: d.cash, color: '#1e7e34' }, { label: 'UPI', value: d.upi, color: '#175cd3' }, { label: 'Bank', value: d.bank, color: '#b8860b' }, { label: 'Due', value: d.dueGiven, color: '#8f1d26' }]} />
           </div>
+          {d.byAccount && Object.keys(d.byAccount).length > 0 && (
+            <div className="card" style={{ marginTop: 10 }}><b style={{ fontSize: 14 }}>👛 Kar kache taka gelo</b>
+              {Object.entries(d.byAccount).map(([a, v]: any) => <div key={a} className="kv"><span>{a}</span><b>{rs(v)}</b></div>)}
+            </div>
+          )}
           <div className="card" style={{ marginTop: 10 }}><b style={{ fontSize: 14 }}>⏰ Hour-wise sales</b>
             {d.byHour?.length ? <HBarChart data={d.byHour.map((h: any) => ({ label: h.hour, value: h.total }))} /> : <small style={{ color: 'var(--muted)' }}>No sales yet.</small>}
           </div>
@@ -274,11 +279,15 @@ export function Personal() {
         <div className="row2"><div><label>Qty</label><input type="number" value={f.qty} onChange={(e) => setF({ ...f, qty: e.target.value })} /></div>
           <div><label>Price ₹ (each)</label><input type="number" value={f.price} onChange={(e) => setF({ ...f, price: e.target.value })} /></div></div>
         <label>Shop / supplier</label><input value={f.supplier} onChange={(e) => setF({ ...f, supplier: e.target.value })} />
+        <label>Kon takay kinlo? (cash na online)</label>
+        <div className="chips">{['', 'CASH', 'UPI', 'BANK'].map((m) => <button key={m} className={`chip${(f.method || '') === m ? ' on' : ''}`} onClick={() => setF({ ...f, method: m })}>{m === '' ? '—' : m}</button>)}</div>
+        {(f.method === 'UPI' || f.method === 'BANK') && (<><label>Kar account theke?</label>
+          <div className="chips">{['Amar PhonePe', 'Mar PhonePe', 'Babar PhonePe', 'Bank'].map((a) => <button key={a} className={`chip${f.account === a ? ' on' : ''}`} onClick={() => setF({ ...f, account: a })}>{a}</button>)}</div></>)}
         <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}><input type="checkbox" checked={addStock} onChange={(e) => setAddStock(e.target.checked)} style={{ width: 22 }} /> Also add to shop stock</label>
         <div className="totals"><div className="tr grand"><span>Total</span><span>{rs(Number(f.qty || 0) * Number(f.price || 0))}</span></div></div>
         <button className="btn primary block" style={{ marginTop: 10 }} onClick={save}>✓ Save</button>
       </div>
-      {items.map((p: any) => <div key={p._id} className="lrow"><span style={{ fontSize: 20 }}>🧺</span><div className="grow"><b className="t">{p.productName} × {p.qty}</b><small>{p.purchaseDate} {p.purchaseTime}{p.addToStock ? ' • +stock' : ''}</small></div><b>{rs(p.total)}</b></div>)}
+      {items.map((p: any) => <div key={p._id} className="lrow"><span style={{ fontSize: 20 }}>🧺</span><div className="grow"><b className="t">{p.productName} × {p.qty}</b><small>{p.purchaseDate} {p.purchaseTime}{p.addToStock ? ' • +stock' : ''}{p.method ? ` • ${p.method}` : ''}{p.account ? ` • ${p.account}` : ''}</small></div><b>{rs(p.total)}</b></div>)}
     </div>
   );
 }

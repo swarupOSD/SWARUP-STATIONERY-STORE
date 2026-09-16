@@ -135,4 +135,25 @@ router.post('/:id/adjust', requirePerm('products.update'), async (req, res, next
   } catch (e) { next(e); }
 });
 
+// Niye gelam (personal/family use): stock decreases with ledger. Ke nilo recorded.
+router.post('/:id/take', requirePerm('products.update'), async (req, res, next) => {
+  try {
+    const p = await Product.findById(req.params.id);
+    if (!p) return res.status(404).json({ error: 'Product not found.' });
+    const { qty, who = 'Ami', reason = '' } = req.body;
+    const q = Math.floor(Number(qty));
+    if (!(q > 0)) return res.status(400).json({ error: 'Qty dao.' });
+    if (!['Ami', 'Ma', 'Baba'].includes(who)) return res.status(400).json({ error: 'Ke nilo select koro (Ami/Ma/Baba).' });
+    const packSize = Math.max(1, Number(p.packSize || 1));
+    const baseQty = q * packSize;
+    if (p.stock - baseQty < 0) return res.status(400).json({ error: `Stock-e matro ${p.stock} ache.` });
+    const before = p.stock, after = before - baseQty;
+    p.stock = after; await p.save();
+    const { date, time } = istParts();
+    await StockMovement.create({ productId: p._id, productName: p.name, type: 'PERSONAL_USE', quantityDelta: -baseQty, before, after, reference: `take-${who}`, reason: `${who} nilo${reason ? ': ' + String(reason).slice(0, 100) : ''}`, date, time, user: req.user.username });
+    await audit(req.user, 'STOCK_TAKEN', 'product', p._id, { who, qty: q, before, after });
+    res.json(p);
+  } catch (e) { next(e); }
+});
+
 module.exports = router;

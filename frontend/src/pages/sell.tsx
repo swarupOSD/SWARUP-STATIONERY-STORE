@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import api, { errMsg } from '../api/client';
-import { Avatar, Empty, Img, PageHead, QtyStepper, Sheet, Skel, getJSON, rs, useDebounce, useToast, waLink } from '../components/ui';
+import { ACCOUNTS, SELLERS, Avatar, Empty, Img, PageHead, QtyStepper, Sheet, Skel, getJSON, rs, useDebounce, useToast, waLink } from '../components/ui';
 import { Scanner, VoiceSale } from '../components/scan';
 import { useLang } from '../i18n/lang';
 import { celebrateSale, pop, buzz } from '../fx';
@@ -40,6 +40,9 @@ export function Sell() {
   const [done, setDone] = useState<any>(null);
   const [showPay, setShowPay] = useState(false);
   const [showCust, setShowCust] = useState(false);
+  const [soldBy, setSoldBy] = useState('Ami');
+  const [account, setAccount] = useState('Cash Drawer');
+  const [dueDate, setDueDate] = useState('');
 
   useEffect(() => { localStorage.setItem('cart', JSON.stringify(cart)); }, [cart]);
   useEffect(() => { api.get('/api/categories').then((r) => setCats(r.data)).catch(() => {}); }, []);
@@ -100,20 +103,21 @@ export function Sell() {
     try {
       const key = `sale-${Date.now()}-${Math.random().toString(36).slice(2)}`;
       let paid = total, breakdown: any[] = [];
-      if (method === 'CASH') { paid = received ? Number(received) : total; breakdown = [{ method: 'CASH', amount: paid }]; }
+      if (method === 'CASH') { paid = received ? Number(received) : total; breakdown = [{ method: 'CASH', amount: paid, account }]; }
       else if (method === 'DUE') { paid = 0; breakdown = [{ method: 'DUE', amount: total }]; }
-      else if (method === 'MIXED') { paid = mixSum; breakdown = (['CASH', 'UPI', 'BANK'] as const).filter((k) => Number(mix[k]) > 0).map((k) => ({ method: k, amount: Number(mix[k]) })); }
-      else { breakdown = [{ method: upiMethod, amount: total }]; }
+      else if (method === 'MIXED') { paid = mixSum; breakdown = (['CASH', 'UPI', 'BANK'] as const).filter((k) => Number(mix[k]) > 0).map((k) => ({ method: k, amount: Number(mix[k]), account: k === 'CASH' ? 'Cash Drawer' : account })); }
+      else { breakdown = [{ method: upiMethod, amount: total, account }]; }
       const { data } = await api.post('/api/sales', {
         items: cart.map((l) => ({ productId: l.productId, qty: l.qty })),
         discount, paymentMethod: method === 'UPI' ? upiMethod : method,
         paymentBreakdown: breakdown, paid,
         customerId: customer?._id, customerName: customer?.name || newCust.trim() || undefined,
+        soldBy, dueDate: method === 'DUE' ? dueDate : '',
         idempotencyKey: key,
       });
       setDone(data); setCart([]); localStorage.removeItem('cart');
       setReceived(''); setMix({ CASH: '', UPI: '', BANK: '' }); setDisc(''); setDiscPct('');
-      setCustomer(null); setNewCust(''); setShowCust(false); setShowPay(false);
+      setCustomer(null); setNewCust(''); setShowCust(false); setShowPay(false); setDueDate('');
       toast(`Sale completed ✓ ${data.receiptNumber}`, 'ok');
       if (method === 'UPI') fetchQr(data.total);
     } catch (e: any) { toast(errMsg(e), 'err'); } finally { setBusy(false); }
@@ -149,8 +153,9 @@ export function Sell() {
                 <div className="p">
                   <span className="nm">{p.name}</span>
                   <span className="pr"><b>{rs(p.sellingPrice)}</b><span>stk {p.stock}</span></span>
-                  <span style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-                    {p.stock <= 0 ? <span className="badge-out">OUT</span> : p.stock <= (p.minStock ?? 5) ? <span className="badge-low">LOW</span> : null}
+                  <div className={`stockbar${p.stock <= 0 ? ' out' : p.stock <= (p.minStock ?? 5) ? ' low' : ''}`}><i style={{ width: `${Math.min(100, Math.max(3, (p.stock / Math.max(1, (p.minStock ?? 5) * 4)) * 100))}%` }} /></div>
+                  <span style={{ display: 'flex', gap: 4, alignItems: 'center', minHeight: 20 }}>
+                    {p.stock <= 0 ? <span className="badge-out">Out</span> : p.stock <= (p.minStock ?? 5) ? <span className="badge-low">Low</span> : null}
                     {margin > 0 && <span className="margin-tag">+{margin}%</span>}
                   </span>
                   <button className="add" onClick={() => add(p)}>+ Add</button>
@@ -189,9 +194,17 @@ export function Sell() {
 
       {showPay && (
         <Sheet title={`Payment • ${rs(total)}`} onClose={() => setShowPay(false)}>
+          <label style={{ marginTop: 0 }}>🧑‍🌾 Ke bechlo?</label>
+          <div className="chips">{SELLERS.map((s) => <button key={s} className={`chip${soldBy === s ? ' on' : ''}`} onClick={() => setSoldBy(s)}>{s === 'Ami' ? '🙋 Ami' : s === 'Ma' ? '👩 Ma' : '👨 Baba'}</button>)}</div>
           <div className="paytabs">
             {METHODS.map((m) => <button key={m.v} className={`btn${method === m.v ? ' on' : ''}`} onClick={() => setMethod(m.v)}>{m.label}</button>)}
           </div>
+          {method !== 'DUE' && (
+            <div>
+              <label>Taka kothay dhuklo?</label>
+              <div className="chips">{ACCOUNTS.filter((a) => method !== 'CASH' || a === 'Cash Drawer').map((a) => <button key={a} className={`chip${account === a ? ' on' : ''}`} onClick={() => setAccount(a)}>{a}</button>)}</div>
+            </div>
+          )}
           {method === 'UPI' && (
             <div>
               <div className="chips">{ALL_METHODS.filter((m) => m !== 'CASH' && m !== 'DUE').map((m) => <button key={m} className={`chip${upiMethod === m ? ' on' : ''}`} onClick={() => setUpiMethod(m)}>{m}</button>)}</div>
@@ -246,6 +259,12 @@ export function Sell() {
               )}
             </div>
           )}
+          {method === 'DUE' && (
+            <div>
+              <label>📅 Kobe debe? (due date, optional)</label>
+              <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+            </div>
+          )}
           {method !== 'DUE' && !customer && !showCust && (
             <button className="btn sm ghost" style={{ marginTop: 8 }} onClick={() => setShowCust(true)}>+ Attach customer (optional)</button>
           )}
@@ -294,6 +313,8 @@ export function ReceiptSheet({ sale, onClose }: { sale: any; onClose: () => void
         <div className="rl rt"><span>Total</span><span>₹{sale.total}</span></div>
         <div className="rl"><span>Paid ({sale.paymentMethod})</span><span>₹{sale.paid}</span></div>
         {!!sale.due && <div className="rl"><span>Due ({sale.customerName})</span><span>₹{sale.due}</span></div>}
+        {!!sale.dueDate && <div className="rl"><span>📅 Debe</span><span>{sale.dueDate}</span></div>}
+        {sale.soldBy && sale.soldBy !== 'Ami' && <div className="rl"><span>Bechlo</span><span>{sale.soldBy === 'Ma' ? '👩 Ma' : '👨 Baba'}</span></div>}
         {!!sale.change && <div className="rl"><span>Change</span><span>₹{sale.change}</span></div>}
         {!!sale.discount && <div className="rl" style={{ color: 'var(--green)', fontWeight: 800 }}><span>🎉 Customer saved</span><span>₹{sale.discount}</span></div>}
         <div className="rf">Thank you! Visit again 🙏 ধন্যবাদ!</div>

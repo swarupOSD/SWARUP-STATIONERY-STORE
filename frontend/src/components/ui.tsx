@@ -51,6 +51,10 @@ export function getJSON<T>(key: string, fallback: T): T {
   }
 }
 
+/* ---------- shop constants ---------- */
+export const SELLERS = ['Ami', 'Ma', 'Baba'];
+export const ACCOUNTS = ['Cash Drawer', 'Amar PhonePe', 'Mar PhonePe', 'Babar PhonePe', 'Bank'];
+
 /* ---------- clock ---------- */
 export function useISTClock() {
   const [now, setNow] = useState(new Date());
@@ -147,7 +151,13 @@ export function PageHead({ title, emoji, children }: { title: string; emoji?: st
   return <div className="pagehead"><h2>{emoji ? `${emoji} ` : ''}{title}</h2>{children}</div>;
 }
 export function Stat({ icon, label, value, sub, tone }: { icon: string; label: string; value: string; sub?: string; tone?: 'accent' | 'red' | 'green' }) {
-  return <div className={`card kpi ${tone || ''}`}><span className="ic">{icon}</span><br /><small>{label}</small><br /><b>{value}</b>{sub && <div className="sub">{sub}</div>}</div>;
+  const tile = tone === 'red' ? '#fbe7e9' : tone === 'green' ? '#e9f4ec' : '#f6ecd2';
+  return (
+    <div className={`card kpi ${tone || ''}`} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+      <span style={{ fontSize: 19, background: tile, borderRadius: 11, width: 40, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{icon}</span>
+      <span style={{ minWidth: 0 }}><small>{label}</small><br /><b>{value}</b>{sub && <div className="sub">{sub}</div>}</span>
+    </div>
+  );
 }
 export function Empty({ emoji, title, sub, action }: { emoji: string; title: string; sub?: string; action?: ReactNode }) {
   return <div className="empty"><span className="e">{emoji}</span><b>{title}</b>{sub && <div style={{ marginTop: 4 }}>{sub}</div>}<div style={{ marginTop: 12 }}>{action}</div></div>;

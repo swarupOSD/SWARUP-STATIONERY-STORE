@@ -46,6 +46,27 @@ router.patch('/:id', requirePerm('customers.create'), async (req, res, next) => 
   } catch (e) { next(e); }
 });
 
+// Takada list: due bills past their promised date, grouped by customer.
+router.get('/dues/overdue', async (req, res, next) => {
+  try {
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+    const bills = await Sale.find({ status: 'COMPLETED', due: { $gt: 0 }, dueDate: { $ne: '' } }).sort({ dueDate: 1 }).limit(300).lean();
+    const byCust = new Map();
+    for (const b of bills) {
+      const k = String(b.customerId || b.customerName);
+      const e = byCust.get(k) || { customerId: b.customerId, customerName: b.customerName, due: 0, oldest: null, bills: [] };
+      e.due = Math.round((e.due + b.due) * 100) / 100;
+      e.bills.push({ receiptNumber: b.receiptNumber, due: b.due, dueDate: b.dueDate, total: b.total });
+      if (b.dueDate) {
+        if (!e.oldest || b.dueDate < e.oldest) e.oldest = b.dueDate;
+        e.overdue = (b.dueDate < today) || e.overdue;
+      }
+      byCust.set(k, e);
+    }
+    res.json([...byCust.values()].sort((a, b) => (b.overdue ? 1 : 0) - (a.overdue ? 1 : 0) || (a.oldest || '').localeCompare(b.oldest || '')));
+  } catch (e) { next(e); }
+});
+
 router.get('/:id', async (req, res, next) => {  try {
     const c = await Customer.findById(req.params.id);
     if (!c) return res.status(404).json({ error: 'Customer not found.' });
@@ -62,13 +83,13 @@ router.post('/:id/payments', requirePerm('payments.create'), async (req, res, ne
   try {
     const c = await Customer.findById(req.params.id);
     if (!c) return res.status(404).json({ error: 'Customer not found.' });
-    const { amount, method, reference = '', notes = '' } = req.body;
+    const { amount, method, reference = '', notes = '', account = '' } = req.body;
     const amt = Number(amount);
     if (!(amt > 0)) return res.status(400).json({ error: 'Enter a valid amount.' });
     if (!['CASH','UPI','PHONEPE','GPAY','BANK','OTHER_UPI','OTHER'].includes(method)) return res.status(400).json({ error: 'Choose a payment method.' });
     if (amt - c.totalDue > 0.01) return res.status(400).json({ error: `Amount exceeds due of ₹${c.totalDue}.` });
     const { date, time } = istParts();
-    const p = await Payment.create({ customerId: c._id, customerName: c.name, amount: amt, method, reference, notes, paymentDate: date, paymentTime: time, receivedBy: req.user.username });
+    const p = await Payment.create({ customerId: c._id, customerName: c.name, amount: amt, method, reference, notes, account: String(account || '').slice(0, 60), paymentDate: date, paymentTime: time, receivedBy: req.user.username });
     c.totalPaid += amt; c.totalDue = Math.max(0, Math.round((c.totalDue - amt) * 100) / 100);
     await c.save();
     await audit(req.user, 'PAYMENT_RECEIVED', 'payment', p._id, { customer: c.name, amount: amt, method });
