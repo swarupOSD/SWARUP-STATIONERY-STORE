@@ -31,8 +31,8 @@ export function Purchase() {
   const submit = async () => {
     if (!lines.length) { toast('Add at least one item', 'err'); return; }
     setBusy(true);
+    let billUrl = '', billPublicId = '';
     try {
-      let billUrl = '', billPublicId = '';
       if (billFile) {
         const fd = new FormData(); fd.append('file', billFile); fd.append('folder', 'bills');
         const up = await api.post('/api/uploads', fd);
@@ -41,7 +41,21 @@ export function Purchase() {
       const { data } = await api.post('/api/purchases', { supplier, invoiceNumber: invoice, source, owner, addToStock: addStock, billUrl, billPublicId, items: lines, payMethod, fundedBy: fundedBy || (payMethod === 'CASH' ? 'Cash' : '') });
       toast(`Purchase saved ✓ ${data.invoiceNumber}`, 'ok');
       setLines([]); setInvoice(''); setBillFile(null); setPayMethod(''); setFundedBy(''); loadHist(); find('');
-    } catch (e: any) { toast(errMsg(e), 'err'); } finally { setBusy(false); }
+    } catch (e: any) {
+      const d = e?.response?.data;
+      if (e?.response?.status === 409 && d?.duplicate) {
+        if (await confirm({ title: 'Ek order-er arekta bill?', body: 'Same order number-e age ekta bill ache. Alada invoice hole Confirm chapoo.', okText: 'Alada bill, save koro' })) {
+          try {
+            const { data } = await api.post('/api/purchases', { supplier, invoiceNumber: invoice, orderNumber: '', source, owner, addToStock: addStock, billUrl, billPublicId, items: lines, payMethod, fundedBy: fundedBy || (payMethod === 'CASH' ? 'Cash' : ''), confirmDuplicate: true });
+            toast(`Purchase saved ✓ ${data.invoiceNumber}`, 'ok');
+            setLines([]); setInvoice(''); setBillFile(null); setPayMethod(''); setFundedBy(''); loadHist(); find('');
+            return;
+          } catch (e2: any) { toast(errMsg(e2), 'err'); return; }
+        }
+        return;
+      }
+      toast(errMsg(e), 'err');
+    } finally { setBusy(false); }
   };
   const voidOne = async (id: string, inv: string) => {
     if (!await confirm({ title: `Void purchase ${inv}?`, body: 'Stock added by this purchase will be reversed.', okText: 'Void' })) return;

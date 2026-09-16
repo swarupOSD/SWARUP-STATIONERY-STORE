@@ -42,7 +42,7 @@ router.post('/', requirePerm('purchases.create'), async (req, res, next) => {
       if (orderNumber && supplier) or.push({ supplier, orderNumber, status: 'COMPLETED' });
       or.push({ fingerprint: fp, status: 'COMPLETED' });
       const dup = await Purchase.findOne({ $or: or });
-      if (dup) return res.status(409).json({ error: 'This invoice may already have been added.', duplicate: true, purchaseId: dup._id });
+      if (dup && !req.body?.confirmDuplicate) return res.status(409).json({ error: 'This invoice may already have been added.', duplicate: true, purchaseId: dup._id });
     }
     const inv = invoiceNumber || await nextPurchaseRef();
     const doc = await Purchase.create({
