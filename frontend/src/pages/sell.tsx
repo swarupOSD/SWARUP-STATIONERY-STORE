@@ -169,7 +169,15 @@ export function Sell() {
   return (
     <div className="page">
       <PageHead title={t('sell')} emoji="🛒">
-        <Scanner onResult={(txt) => setQ(txt)} />
+        <Scanner onResult={(txt) => {
+          setQ(txt);
+          // exact barcode/SKU hit → straight into cart
+          api.get('/api/products', { params: { q: txt, limit: 5 } }).then((r) => {
+            const hits = (r.data.items || []).filter((p: any) => [p.barcode, p.sku, p.qrCode].filter(Boolean).some((c: string) => String(c).toLowerCase() === txt.toLowerCase()));
+            if (hits.length === 1) { add(hits[0]); toast(`✓ ${hits[0].name} added`, 'ok'); }
+            else if (hits.length > 1) toast(`${hits.length} match — choose below`, 'info');
+          }).catch(() => {});
+        }} />
         <VoiceSale onParsed={(found) => {
           const matched = (found || []).filter((f: any) => f.matchedProductId);
           if (!matched.length) { toast('No products matched. Review voice result.', 'err'); return; }
@@ -204,7 +212,7 @@ export function Sell() {
                     {p.stock <= 0 ? <span className="badge-out">Out</span> : p.stock <= (p.minStock ?? 5) ? <span className="badge-low">Low</span> : null}
                     {margin > 0 && <span className="margin-tag">+{margin}%</span>}
                   </span>
-                  <button className="add" onClick={() => add(p)}>+ Add</button>
+                  <button className="add" disabled={p.stock <= 0} style={p.stock <= 0 ? { opacity: .45 } : {}} onClick={() => add(p)}>{p.stock <= 0 ? 'Out' : '+ Add'}</button>
                 </div>
               </div>
             );
@@ -229,8 +237,16 @@ export function Sell() {
                   </span>
                 )}
                 <small>{rs(lineRate(l))} × {l.qty}{l.unitKind === 'piece' ? ' pcs' : l.packSize > 1 ? ' pkt' : ''} = {rs(r2(l.qty * lineRate(l)))}</small>
+                {(() => {
+                  const maxQ = l.unitKind === 'piece' ? l.stock : Math.floor(l.stock / Math.max(1, l.packSize));
+                  return maxQ < l.qty ? <small style={{ color: 'var(--rose-tx)' }}>⚠ stock-e {maxQ} ache</small> : null;
+                })()}
               </div>
-              <QtyStepper qty={l.qty} onChange={(qq) => setQty(l.productId, l.unitKind, qq)} />
+              <QtyStepper qty={l.qty} onChange={(qq) => {
+                const maxQ = l.unitKind === 'piece' ? l.stock : Math.max(1, Math.floor(l.stock / Math.max(1, l.packSize)));
+                if (qq > maxQ) { toast(`Stock-e matro ${maxQ} ache`, 'err'); setQty(l.productId, l.unitKind, maxQ); }
+                else setQty(l.productId, l.unitKind, qq);
+              }} />
             </div>
           ))}
           <div className="row2" style={{ marginTop: 8 }}>

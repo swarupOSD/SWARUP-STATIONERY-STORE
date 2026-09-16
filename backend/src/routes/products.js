@@ -8,6 +8,7 @@ const { auth, requirePerm, requireRole } = require('../middleware/auth');
 const { audit } = require('../middleware/common');
 const { istParts } = require('../utils/ist');
 const { previewImageUrl } = require('../services/imageGuard');
+const { suggestImages } = require('../services/imageSuggest');
 const { suggestTemplate } = require('../services/ai');
 
 const router = express.Router();
@@ -21,8 +22,16 @@ router.post('/suggest', (req, res) => {
 });
 
 // Safe image URL preview (SSRF-protected)
-router.post('/preview-image', async (req, res, next) => {
+// Photo finder: candidate images for a product name. Shopkeeper picks (match guaranteed).
+router.get('/image-suggest', async (req, res, next) => {
   try {
+    const q = String(req.query.q || '').trim();
+    if (q.length < 2) return res.status(400).json({ error: 'Search text dao.' });
+    res.json({ items: await suggestImages(q) });
+  } catch (e) { next(e); }
+});
+
+router.post('/preview-image', async (req, res, next) => {  try {
     const { url } = req.body;
     if (!url) return res.status(400).json({ error: 'Image URL is required.' });
     const r = await previewImageUrl(String(url));

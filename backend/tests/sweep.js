@@ -304,6 +304,12 @@ async function check(name, fn) {
       const pe = await call('PATCH', `/api/products/${pid}`, { purchasedBy: 'Ma', fundedBy: 'Amar PhonePe', loosePrice: 16 });
       assert.equal(pe.status, 200); assert.equal(pe.data.purchasedBy, 'Ma');
     });
+    await check('image-suggest endpoint shape', async () => {
+      const bad = await call('GET', '/api/products/image-suggest?q=x');
+      assert.equal(bad.status, 400);
+      const r = await call('GET', '/api/products/image-suggest?q=Reynolds%20Pen');
+      assert.equal(r.status, 200); assert.ok(Array.isArray(r.data.items));
+    });
     await check('guarded deletes', async () => {
       // product with history: blocked, then deactivate works
       const has = await call('DELETE', `/api/products/${global.__pid}`);

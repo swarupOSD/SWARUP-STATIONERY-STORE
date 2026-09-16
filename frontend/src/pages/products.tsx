@@ -160,6 +160,11 @@ function ProductDetail({ p, onClose }: { p: any; onClose: () => void }) {
       {p.brand && <div className="kv"><span>Brand</span><span>{p.brand}</span></div>}
       {(p.sku || p.barcode) && <div className="kv"><span>SKU / Barcode</span><span>{p.sku || p.barcode}</span></div>}
       {p.supplier && <div className="kv"><span>Supplier</span><span>{p.supplier}</span></div>}
+      <div className="section-t">📷 Chhobi bodlao</div>
+      <PhotoFinder name={p.name} onPick={async (url, page) => {
+        try { await api.patch(`/api/products/${p._id}`, { imageUrl: url, ...(page ? { productLink: page } : {}) }); toast('Chhobi saved ✓', 'ok'); onClose(); }
+        catch (e: any) { toast(errMsg(e), 'err'); }
+      }} />
 
       {p.needsPricing && (
         <div className="card" style={{ marginTop: 8, borderLeft: '4px solid var(--blue)', background: '#fff' }}>
@@ -217,6 +222,43 @@ function ProductDetail({ p, onClose }: { p: any; onClose: () => void }) {
       )}
       {labels && <LabelSheet p={p} onClose={() => setLabels(false)} />}
     </Sheet>
+  );
+}
+
+export function PhotoFinder({ name, onPick }: { name: string; onPick: (url: string, page: string) => void }) {
+  const toast = useToast();
+  const [q, setQ] = useState(name);
+  const [items, setItems] = useState<any[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState(false);
+  const find = async () => {
+    if (q.trim().length < 2) return;
+    setBusy(true);
+    try {
+      const { data } = await api.get('/api/products/image-suggest', { params: { q: q.trim() } });
+      setItems(data.items || []); setDone(true);
+      if (!(data.items || []).length) toast('Kichu pelam na — nam bodle try koro', 'err');
+    } catch (e: any) { toast(errMsg(e), 'err'); } finally { setBusy(false); }
+  };
+  useEffect(() => { setQ(name); }, [name]);
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Product nam…" />
+        <button className="btn gold" onClick={find} disabled={busy}>{busy ? '…' : '🔍 Find'}</button>
+      </div>
+      {done && items.length > 0 && (
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
+          {items.map((c, i) => (
+            <div key={i} style={{ border: '1px solid var(--line)', borderRadius: 10, overflow: 'hidden', cursor: 'pointer', background: '#fff' }} onClick={() => { onPick(c.murl, c.purl || ''); toast('Chhobi bosano ✓', 'ok'); }}>
+              <img src={c.murl} alt={c.title} loading="lazy" style={{ width: '100%', height: 110, objectFit: 'contain', background: '#f4f6f9' }} onError={(e) => { (e.target as any).style.display = 'none'; }} />
+              <div style={{ fontSize: 11, padding: 4, color: 'var(--muted)' }}>{(c.title || '').slice(0, 50)}</div>
+            </div>
+          ))}
+        </div>
+      )}
+      {done && <small style={{ color: 'var(--muted)' }}>Mil-jawa chhobi-te tap koro — thik-ta bosbe ✓</small>}
+    </div>
   );
 }
 
@@ -311,6 +353,8 @@ export function ProductForm({ editId }: { editId?: string }) {
         <div style={{ display: 'flex', gap: 8 }}><input value={f.imageUrl || ''} onChange={(e) => set('imageUrl', e.target.value)} placeholder="Paste image URL…" /><button className="btn gold" onClick={checkImage}>Check</button></div>
         {preview && <img src={preview} alt="preview" style={{ width: '100%', maxHeight: 200, objectFit: 'contain', background: '#fff', border: '1px solid var(--line)', borderRadius: 12, marginTop: 8 }} />}
         <label style={{ marginTop: 8 }}>Upload / camera</label><input type="file" accept="image/*" capture="environment" onChange={(e) => e.target.files?.[0] && uploadFile(e.target.files[0])} />
+        <label style={{ marginTop: 8 }}>🔍 Online theke chhobi (tap kore bosao)</label>
+        <PhotoFinder name={f.name || ''} onPick={(url, page) => { set('imageUrl', url); setPreview(url); if (page) set('productLink', page); }} />
         <div className="row2">
           <div><label>Buy price ₹ *</label><input value={f.purchasePrice} onChange={(e) => set('purchasePrice', e.target.value)} inputMode="decimal" /></div>
           <div><label>Sell price ₹ * (packet)</label><input value={f.sellingPrice} onChange={(e) => set('sellingPrice', e.target.value)} inputMode="decimal" /></div>
