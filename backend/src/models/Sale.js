@@ -4,9 +4,10 @@ const SaleItemSchema = new mongoose.Schema({
   productId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true },
   name: { type: String, required: true }, // snapshot
   unit: { type: String, default: 'piece' },
-  qty: { type: Number, required: true, min: 0 }, // sale packs (e.g. packets)
+  qty: { type: Number, required: true, min: 0 }, // packs OR pieces (see unitKind)
   baseQty: { type: Number, required: true, min: 0 }, // base units deducted
-  rate: { type: Number, required: true, min: 0 }, // snapshot selling price per sale pack
+  rate: { type: Number, required: true, min: 0 }, // snapshot price per pack/piece
+  unitKind: { type: String, enum: ['pack', 'piece'], default: 'pack' }, // gota packet vs khuchra
   purchasePriceSnapshot: { type: Number, required: true, min: 0 }, // per base unit cost snapshot
   lineTotal: { type: Number, required: true, min: 0 },
   lineCost: { type: Number, required: true, min: 0 },
@@ -38,7 +39,7 @@ const SaleSchema = new mongoose.Schema({
   profit: { type: Number, default: 0 },
   status: { type: String, enum: ['COMPLETED','VOIDED'], default: 'COMPLETED', index: true },
   voidReason: { type: String, default: '' },
-  returned: [{ productId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product' }, qty: { type: Number, default: 0 } }],
+  returned: [{ productId: { type: mongoose.Schema.Types.ObjectId, ref: 'Product' }, qty: { type: Number, default: 0 }, unitKind: { type: String, enum: ['pack', 'piece'], default: 'pack' } }],
   cashier: { type: String, default: '' },
   cashierId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   soldBy: { type: String, enum: ['Ami', 'Ma', 'Baba'], default: 'Ami', index: true }, // ke bechlo

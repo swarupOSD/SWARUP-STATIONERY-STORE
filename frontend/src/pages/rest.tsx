@@ -351,18 +351,21 @@ export function SalesHistory() {
 
 function ReturnSheet({ sale, onClose }: { sale: any; onClose: () => void }) {
   const toast = useToast();
-  const already = new Map<string, number>((sale.returned || []).map((r: any): [string, number] => [String(r.productId), Number(r.qty || 0)]));
+  const rkey = (pid: any, uk: any) => `${String(pid)}|${uk || 'pack'}`;
+  const already = new Map<string, number>((sale.returned || []).map((r: any): [string, number] => [rkey(r.productId, r.unitKind), Number(r.qty || 0)]));
   const [qty, setQty] = useState<Record<string, number>>({});
   const [reason, setReason] = useState('');
   const [method, setMethod] = useState('CASH');
   const [busy, setBusy] = useState(false);
-  const lines = sale.items.map((it: any) => {
-    const max = it.qty - (already.get(String(it.productId)) || 0);
-    return { ...it, max, sel: Math.min(qty[String(it.productId)] || 0, Math.max(0, max)) };
+  const lines = sale.items.map((it: any, idx: number) => {
+    const uk = it.unitKind || 'pack';
+    const max = it.qty - (already.get(rkey(it.productId, uk)) || 0);
+    const k = `${rkey(it.productId, uk)}#${idx}`;
+    return { ...it, uk, ukLabel: uk === 'piece' ? 'pcs' : 'pkt', max, sel: Math.min(qty[k] || 0, Math.max(0, max)), k };
   }).filter((l: any) => l.max > 0);
   const refund = lines.reduce((s: number, l: any) => s + l.sel * l.rate, 0);
   const submit = async () => {
-    const items = lines.filter((l: any) => l.sel > 0).map((l: any) => ({ productId: l.productId, qty: l.sel }));
+    const items = lines.filter((l: any) => l.sel > 0).map((l: any) => ({ productId: l.productId, qty: l.sel, unitKind: l.uk }));
     if (!items.length) { toast('Choose return quantity', 'err'); return; }
     setBusy(true);
     try {
@@ -374,9 +377,9 @@ function ReturnSheet({ sale, onClose }: { sale: any; onClose: () => void }) {
   return (
     <Sheet title={`↩ Return • ${sale.receiptNumber}`} onClose={onClose}>
       {lines.map((l: any) => (
-        <div key={String(l.productId)} className="cartline">
-          <div className="nm"><b>{l.name}</b><small>sold {l.qty} @ {rs(l.rate)} • returnable {l.max}</small></div>
-          <QtyStepper qty={l.sel} onChange={(v) => setQty({ ...qty, [String(l.productId)]: Math.min(v, l.max) })} />
+        <div key={l.k} className="cartline">
+          <div className="nm"><b>{l.name}</b><small>sold {l.qty} {l.ukLabel} @ {rs(l.rate)} • returnable {l.max}</small></div>
+          <QtyStepper qty={l.sel} onChange={(v) => setQty({ ...qty, [l.k]: Math.min(v, l.max) })} />
           <b>{rs(l.sel * l.rate)}</b>
         </div>
       ))}

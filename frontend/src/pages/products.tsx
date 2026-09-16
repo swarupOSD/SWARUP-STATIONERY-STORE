@@ -108,6 +108,9 @@ function ProductDetail({ p, onClose }: { p: any; onClose: () => void }) {
       </div>
       <div className="kv"><span>Category</span><span>{p.category}{p.subcategory ? ` / ${p.subcategory}` : ''}</span></div>
       <div className="kv"><span>Pack</span><span>1 {p.unit === 'packet' ? 'packet' : p.unit} = {p.packSize || 1} pcs</span></div>
+      {(p.packSize || 1) > 1 && <div className="kv"><span>Loose (per pc)</span><b>{rs(p.loosePrice > 0 ? p.loosePrice : p.sellingPrice / (p.packSize || 1))}</b></div>}
+      {p.purchasedBy && <div className="kv"><span>Ke kineche</span><span>{p.purchasedBy === 'Ami' ? '🙋 Ami' : p.purchasedBy === 'Ma' ? '👩 Ma' : '👨 Baba'}</span></div>}
+      {p.fundedBy && <div className="kv"><span>Kar takay</span><span>{p.fundedBy}</span></div>}
       {p.brand && <div className="kv"><span>Brand</span><span>{p.brand}</span></div>}
       {(p.sku || p.barcode) && <div className="kv"><span>SKU / Barcode</span><span>{p.sku || p.barcode}</span></div>}
       {p.supplier && <div className="kv"><span>Supplier</span><span>{p.supplier}</span></div>}
@@ -264,12 +267,16 @@ export function ProductForm({ editId }: { editId?: string }) {
         <label style={{ marginTop: 8 }}>Upload / camera</label><input type="file" accept="image/*" capture="environment" onChange={(e) => e.target.files?.[0] && uploadFile(e.target.files[0])} />
         <div className="row2">
           <div><label>Buy price ₹ *</label><input value={f.purchasePrice} onChange={(e) => set('purchasePrice', e.target.value)} inputMode="decimal" /></div>
-          <div><label>Sell price ₹ *</label><input value={f.sellingPrice} onChange={(e) => set('sellingPrice', e.target.value)} inputMode="decimal" /></div>
+          <div><label>Sell price ₹ * (packet)</label><input value={f.sellingPrice} onChange={(e) => set('sellingPrice', e.target.value)} inputMode="decimal" /></div>
         </div>
         {margin !== null && <div style={{ marginTop: 6 }}><span className="margin-tag">Margin +{margin}% • profit {rs(Number(f.sellingPrice) - Number(f.purchasePrice))}/pc</span></div>}
         <div className="row2">
+          <div><label>Loose price ₹ (per pc, khuchra)</label><input value={f.loosePrice ?? ''} onChange={(e) => set('loosePrice', e.target.value)} inputMode="decimal" placeholder={f.sellingPrice && f.packSize > 1 ? `auto ₹${(Number(f.sellingPrice) / Number(f.packSize)).toFixed(2)}` : 'same as sell'} /></div>
           <div><label>Stock *</label><input value={f.stock} onChange={(e) => set('stock', e.target.value)} inputMode="numeric" /></div>
+        </div>
+        <div className="row2">
           <div><label>Min stock (alert)</label><input value={f.minStock ?? ''} onChange={(e) => set('minStock', e.target.value)} inputMode="numeric" /></div>
+          <div><label>Supplier</label><input value={f.supplier || ''} onChange={(e) => set('supplier', e.target.value)} /></div>
         </div>
         <div className="row2">
           <div><label>Category</label><input list="catlist" value={f.category || ''} onChange={(e) => set('category', e.target.value)} placeholder="Stationery…" /><datalist id="catlist">{cats.map((c) => <option key={c._id} value={c.name} />)}</datalist></div>
@@ -280,6 +287,11 @@ export function ProductForm({ editId }: { editId?: string }) {
           <div><label>Barcode / SKU</label><input value={f.barcode || f.sku || ''} onChange={(e) => set('barcode', e.target.value)} /></div>
         </div>
         <label>Supplier</label><input value={f.supplier || ''} onChange={(e) => set('supplier', e.target.value)} />
+        <div className="section-t">🛒 Ke kinlo? Kar takay?</div>
+        <label style={{ marginTop: 0 }}>Ke kinlo (buyer)</label>
+        <div className="chips">{['', 'Ami', 'Ma', 'Baba'].map((w) => <button key={w} className={`chip${(f.purchasedBy || '') === w ? ' on' : ''}`} onClick={() => set('purchasedBy', w)}>{w === '' ? '—' : w}</button>)}</div>
+        <label>Kar taka diye kena</label>
+        <div className="chips">{['', 'Cash', 'Amar PhonePe', 'Mar PhonePe', 'Babar PhonePe', 'Bank'].map((a) => <button key={a} className={`chip${(f.fundedBy || '') === a ? ' on' : ''}`} onClick={() => set('fundedBy', a)}>{a === '' ? '—' : a}</button>)}</div>
         <button className="btn primary block" style={{ marginTop: 14 }} onClick={save}>✓ Save product</button>
       </div>
     </div>

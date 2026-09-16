@@ -51,18 +51,21 @@ router.post('/', requirePerm('sales.create'), async (req, res, next) => {
     for (const it of items) {
       const p = map.get(String(it.productId));
       if (!p || !p.active) return res.status(400).json({ error: `Product unavailable: ${it.productId}` });
-      const qty = Number(it.qty); // sale packs
+      const qty = Number(it.qty);
       if (!Number.isFinite(qty) || qty <= 0) return res.status(400).json({ error: `Invalid quantity for ${p.name}.` });
       const packSize = Math.max(1, Number(p.packSize || 1));
-      const baseQty = Math.round(qty * packSize);
-      const rate = Number(p.sellingPrice); // server price, ignore client rate
+      const unitKind = it.unitKind === 'piece' ? 'piece' : 'pack';
+      const pieceRate = Number(p.loosePrice) > 0 ? Number(p.loosePrice) : round2(Number(p.sellingPrice) / packSize);
+      const rate = unitKind === 'piece' ? pieceRate : Number(p.sellingPrice); // server price, ignore client rate
+      const baseQty = unitKind === 'piece' ? Math.round(qty) : Math.round(qty * packSize);
+      if (unitKind === 'piece' && packSize <= 1) return res.status(400).json({ error: `${p.name} has no packet/piece split.` });
       const lineTotal = round2(qty * rate);
       const costPerBase = Number(p.purchasePrice) / packSize;
       const lineCost = round2(baseQty * costPerBase);
       if (p.stock - baseQty < 0 && !negAllowed) return res.status(400).json({ error: `${p.name} has only ${p.stock} in stock. Not enough for ${baseQty}.` });
       subtotal = round2(subtotal + lineTotal);
       totalCost = round2(totalCost + lineCost);
-      saleItems.push({ productId: p._id, name: p.name, unit: p.unit, qty, baseQty, rate, purchasePriceSnapshot: Number(p.purchasePrice), lineTotal, lineCost });
+      saleItems.push({ productId: p._id, name: p.name, unit: p.unit, qty, baseQty, rate, unitKind, purchasePriceSnapshot: Number(p.purchasePrice), lineTotal, lineCost });
     }
     const disc = round2(Math.max(0, Number(discount || 0)));
     const tx = settings?.taxEnabled ? round2(Math.max(0, Number(tax || 0))) : 0;
@@ -268,14 +271,16 @@ router.post('/:id/return', requirePerm('sales.void'), async (req, res, next) => 
     if (!Array.isArray(items) || !items.length) return res.status(400).json({ error: 'Choose at least one item to return.' });
     if (!['CASH', 'UPI', 'BANK', 'ADJUST_DUE', 'OTHER'].includes(refundMethod)) return res.status(400).json({ error: 'Invalid refund method.' });
     const { date, time } = istParts();
-    const already = new Map((s.returned || []).map((r) => [String(r.productId), Number(r.qty || 0)]));
+    const rkey = (pid, uk) => `${String(pid)}|${uk || 'pack'}`;
+    const already = new Map((s.returned || []).map((r) => [rkey(r.productId, r.unitKind), Number(r.qty || 0)]));
     const retItems = [];
     let refundTotal = 0, refundCost = 0;
     for (const it of items) {
-      const si = s.items.find((x) => String(x.productId) === String(it.productId));
+      const uk = it.unitKind === 'piece' ? 'piece' : 'pack';
+      const si = s.items.find((x) => String(x.productId) === String(it.productId) && (x.unitKind || 'pack') === uk);
       if (!si) return res.status(400).json({ error: 'Item is not part of this bill.' });
       const qty = Math.floor(Number(it.qty));
-      const maxQ = si.qty - (already.get(String(si.productId)) || 0);
+      const maxQ = si.qty - (already.get(rkey(si.productId, si.unitKind)) || 0);
       if (!(qty > 0) || qty > maxQ) return res.status(400).json({ error: `"${si.name}": can return at most ${maxQ}.` });
       const packSize = Math.max(1, Math.round(si.baseQty / Math.max(1, si.qty)));
       const baseQty = qty * packSize;
@@ -284,7 +289,8 @@ router.post('/:id/return', requirePerm('sales.void'), async (req, res, next) => 
       retItems.push({ productId: si.productId, name: si.name, qty, baseQty, rate: si.rate, lineTotal, lineCost });
       refundTotal = Math.round((refundTotal + lineTotal) * 100) / 100;
       refundCost = Math.round((refundCost + lineCost) * 100) / 100;
-      already.set(String(si.productId), (already.get(String(si.productId)) || 0) + qty);
+      const k = rkey(si.productId, si.unitKind);
+      already.set(k, (already.get(k) || 0) + qty);
       const p = await Product.findById(si.productId);
       if (p) {
         const before = p.stock, after = before + baseQty;
@@ -292,7 +298,7 @@ router.post('/:id/return', requirePerm('sales.void'), async (req, res, next) => 
         await StockMovement.create({ productId: p._id, productName: p.name, type: 'RETURN', quantityDelta: baseQty, before, after, reference: s.receiptNumber, referenceId: String(s._id), reason: reason || 'Customer return', date, time, user: req.user.username });
       }
     }
-    s.returned = [...already.entries()].map(([productId, qty]) => ({ productId, qty }));
+    s.returned = [...already.entries()].map(([k, qty]) => { const [productId, unitKind] = k.split('|'); return { productId, qty, unitKind }; });
     await s.save();
     const ret = await Return.create({
       saleId: s._id, receiptNumber: s.receiptNumber, customerId: s.customerId, customerName: s.customerName,

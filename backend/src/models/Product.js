@@ -15,7 +15,10 @@ const ProductSchema = new mongoose.Schema({
   barcode: { type: String, default: '', index: true, sparse: true, trim: true },
   qrCode: { type: String, default: '' },
   purchasePrice: { type: Number, required: true, min: 0 },
-  sellingPrice: { type: Number, required: true, min: 0 },
+  sellingPrice: { type: Number, required: true, min: 0 }, // per PACK (packet/box)
+  loosePrice: { type: Number, default: 0, min: 0 }, // per PIECE (khuchra); 0 = auto = selling/packSize
+  purchasedBy: { type: String, enum: ['', 'Ami', 'Ma', 'Baba'], default: '' }, // ke kinlo
+  fundedBy: { type: String, default: '' }, // kar taka diye kena: Cash / Amar PhonePe / ...
   stock: { type: Number, required: true, default: 0 }, // base units (e.g. cigarettes)
   minStock: { type: Number, default: 5 },
   unit: { type: String, enum: UNITS, default: 'piece' },

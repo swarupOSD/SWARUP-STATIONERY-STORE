@@ -250,8 +250,7 @@ async function check(name, fn) {
       const del = await call('DELETE', `/api/expenses/${e1.data._id}`);
       assert.equal(del.status, 200);
     });
-    await check('soldBy + dueDate + account + take + overdue', async () => {
-      const c = await call('POST', '/api/customers', { name: 'Sweep Due' });
+    await check('soldBy + dueDate + account + take + overdue', async () => {      const c = await call('POST', '/api/customers', { name: 'Sweep Due' });
       const s = await call('POST', '/api/sales', { items: [{ productId: global.__pid, qty: 2 }], paymentMethod: 'DUE', paid: 0, customerId: c.data._id, soldBy: 'Ma', dueDate: '2026-09-20', paymentBreakdown: [], idempotencyKey: 'sw-fam-' + Date.now() });
       assert.equal(s.status, 201);
       assert.equal(s.data.soldBy, 'Ma');
@@ -279,6 +278,32 @@ async function check(name, fn) {
       const cats = await call('GET', '/api/categories');
       const names = cats.data.map((x) => x.name);
       assert.ok(names.includes('Pooja Items') && names.includes('School Supplies'), 'new categories');
+    });
+    await check('loose (khuchra) sale + purchasedBy/fundedBy', async () => {
+      // product: packet of 10, sell 125, loose 15
+      const pr = await call('POST', '/api/products', { name: 'Sweep Cig', category: 'Cigarettes', unit: 'packet', packSize: 10, purchasePrice: 100, sellingPrice: 125, loosePrice: 15, stock: 30, purchasedBy: 'Baba', fundedBy: 'Cash' });
+      assert.equal(pr.status, 201);
+      assert.equal(pr.data.purchasedBy, 'Baba');
+      const pid = pr.data._id;
+      // sell 1 packet + 3 loose: stock 30 -> 20 -> 17
+      const s1 = await call('POST', '/api/sales', { items: [{ productId: pid, qty: 1, unitKind: 'pack' }], paymentMethod: 'CASH', paid: 125, idempotencyKey: 'sw-loose1-' + Date.now() });
+      assert.equal(s1.status, 201); assert.equal(s1.data.total, 125);
+      assert.equal((await call('GET', `/api/products/${pid}`)).data.stock, 20);
+      const s2 = await call('POST', '/api/sales', { items: [{ productId: pid, qty: 3, unitKind: 'piece' }], paymentMethod: 'CASH', paid: 45, idempotencyKey: 'sw-loose2-' + Date.now() });
+      assert.equal(s2.status, 201); assert.equal(s2.data.total, 45);
+      assert.equal((await call('GET', `/api/products/${pid}`)).data.stock, 17);
+      // piece on non-split product rejected
+      const bad = await call('POST', '/api/sales', { items: [{ productId: global.__pid, qty: 1, unitKind: 'piece' }], paymentMethod: 'CASH', paid: 10, idempotencyKey: 'sw-loose3-' + Date.now() });
+      assert.equal(bad.status, 400);
+      // return 2 loose pcs: stock 17 -> 19, then over-return blocked
+      const rt = await call('POST', `/api/sales/${s2.data._id}/return`, { items: [{ productId: pid, qty: 2, unitKind: 'piece' }], refundMethod: 'CASH' });
+      assert.equal(rt.status, 201); assert.equal(rt.data.refundTotal, 30);
+      assert.equal((await call('GET', `/api/products/${pid}`)).data.stock, 19);
+      const rt2 = await call('POST', `/api/sales/${s2.data._id}/return`, { items: [{ productId: pid, qty: 2, unitKind: 'piece' }], refundMethod: 'CASH' });
+      assert.equal(rt2.status, 400);
+      // edit buyer/funder later
+      const pe = await call('PATCH', `/api/products/${pid}`, { purchasedBy: 'Ma', fundedBy: 'Amar PhonePe', loosePrice: 16 });
+      assert.equal(pe.status, 200); assert.equal(pe.data.purchasedBy, 'Ma');
     });
   }
 

@@ -279,7 +279,7 @@ export function CustomerDetail({ id }: { id: string }) {  const toast = useToast
       {(tab === 'all' || tab === 'dues') && (d.sales || []).map((s: any) => (
         <div key={s._id} className="lrow">
           <span style={{ fontSize: 22 }}>🧾</span>
-          <div className="grow"><b className="t">{s.receiptNumber} • {s.transactionDate} {s.transactionTime}</b><small>{(s.items || []).map((i: any) => `${i.name}×${i.qty}`).join(', ')}{s.soldBy && s.soldBy !== 'Ami' ? ` • ${s.soldBy} bechlo` : ''}</small></div>
+          <div className="grow"><b className="t">{s.receiptNumber} • {s.transactionDate} {s.transactionTime}</b><small>{(s.items || []).map((i: any) => `${i.name}×${i.qty}${(i.unitKind || 'pack') === 'piece' ? 'pcs' : ''}`).join(', ')}{s.soldBy && s.soldBy !== 'Ami' ? ` • ${s.soldBy} bechlo` : ''}</small></div>
           <div style={{ textAlign: 'right' }}><b>{rs(s.total)}</b>{s.due > 0 ? <div><span className="badge-out">due {rs(s.due)}</span>{s.dueDate ? <div><small>📅 {s.dueDate}{s.dueDate < todayStr() ? ' • OVERDUE' : ''}</small></div> : null}</div> : <div><span className="badge-ok">paid</span></div>}</div>
         </div>
       ))}

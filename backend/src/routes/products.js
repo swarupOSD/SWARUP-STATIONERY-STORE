@@ -83,6 +83,9 @@ router.post('/', requirePerm('products.create'), async (req, res, next) => {
       imageUrl: b.imageUrl || '', imagePublicId: b.imagePublicId || '', productLink: b.productLink || '',
       sku: b.sku || '', barcode: b.barcode || '', qrCode: b.qrCode || '',
       purchasePrice: Number(b.purchasePrice), sellingPrice: Number(b.sellingPrice),
+      loosePrice: Math.max(0, Number(b.loosePrice || 0)),
+      purchasedBy: ['Ami', 'Ma', 'Baba'].includes(b.purchasedBy) ? b.purchasedBy : '',
+      fundedBy: String(b.fundedBy || '').slice(0, 60),
       stock: Number(b.stock || 0), minStock: b.minStock ?? 5,
       unit: b.unit || t.unit, packSize: Math.max(1, Number(b.packSize || t.packSize || 1)),
       supplier: b.supplier || '', brand: b.brand || '', tax: Number(b.tax || 0),
@@ -103,8 +106,10 @@ router.patch('/:id', requirePerm('products.update'), async (req, res, next) => {
     const p = await Product.findById(req.params.id);
     if (!p) return res.status(404).json({ error: 'Product not found.' });
     const oldPP = p.purchasePrice, oldSP = p.sellingPrice, oldStock = p.stock;
-    const editable = ['name','nameBn','aliases','category','subcategory','imageUrl','imagePublicId','productLink','sku','barcode','qrCode','purchasePrice','sellingPrice','minStock','unit','packSize','supplier','brand','tax','discount','notes','needsPricing','active'];
+    const editable = ['name','nameBn','aliases','category','subcategory','imageUrl','imagePublicId','productLink','sku','barcode','qrCode','purchasePrice','sellingPrice','loosePrice','purchasedBy','fundedBy','minStock','unit','packSize','supplier','brand','tax','discount','notes','needsPricing','active'];
     for (const k of editable) if (req.body[k] !== undefined) p[k] = req.body[k];
+    if (p.purchasedBy && !['Ami', 'Ma', 'Baba'].includes(p.purchasedBy)) p.purchasedBy = '';
+    p.loosePrice = Math.max(0, Number(p.loosePrice || 0));
     // stock changes go through adjust endpoint; ignore direct stock here unless admin adjustment flag
     await p.save();
     if (Number(oldPP) !== Number(p.purchasePrice) || Number(oldSP) !== Number(p.sellingPrice)) {

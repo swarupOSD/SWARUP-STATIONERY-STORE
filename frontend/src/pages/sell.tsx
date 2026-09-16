@@ -5,8 +5,22 @@ import { Scanner, VoiceSale } from '../components/scan';
 import { useLang } from '../i18n/lang';
 import { celebrateSale, pop, buzz } from '../fx';
 
-type CartLine = { productId: string; name: string; qty: number; rate: number; stock: number; unit: string };
+type CartLine = { productId: string; name: string; qty: number; rate: number; stock: number; unit: string; packSize: number; loosePrice: number; unitKind: 'pack' | 'piece' };
 type Customer = { _id: string; name: string; phone?: string; totalDue: number; creditLimit?: number };
+
+const r2 = (n: number) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
+// client mirror of server pricing: packet rate vs loose (khuchra) rate
+export const lineRate = (l: { rate: number; packSize?: number; loosePrice?: number; unitKind?: 'pack' | 'piece' }) => {
+  const ps = Math.max(1, Number(l.packSize || 1));
+  if ((l.unitKind || 'pack') === 'piece') return Number(l.loosePrice) > 0 ? Number(l.loosePrice) : r2(Number(l.rate || 0) / ps);
+  return Number(l.rate || 0);
+};
+const normLine = (l: any): CartLine => ({
+  productId: l.productId, name: l.name, qty: Number(l.qty) || 1, rate: Number(l.rate) || 0,
+  stock: Number(l.stock ?? 99), unit: l.unit || 'pc',
+  packSize: Math.max(1, Number(l.packSize || 1)), loosePrice: Number(l.loosePrice || 0),
+  unitKind: l.unitKind === 'piece' ? 'piece' : 'pack',
+});
 
 const METHODS = [
   { v: 'CASH', label: '💵 Cash' }, { v: 'UPI', label: '📱 UPI' },
@@ -23,8 +37,11 @@ export function Sell() {
   const [cats, setCats] = useState<any[]>([]);
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [cart, setCart] = useState<CartLine[]>(() => getJSON('cart', [] as CartLine[]));
-  const [held, setHeld] = useState<CartLine[] | null>(() => getJSON('heldCart', null as CartLine[] | null));
+  const [cart, setCart] = useState<CartLine[]>(() => getJSON('cart', [] as CartLine[]).map(normLine));
+  const [held, setHeld] = useState<CartLine[] | null>(() => {
+    const h = getJSON('heldCart', null as CartLine[] | null);
+    return h ? h.map(normLine) : null;
+  });
   const [disc, setDisc] = useState('');
   const [discPct, setDiscPct] = useState('');
   const [method, setMethod] = useState('CASH');
@@ -53,7 +70,7 @@ export function Sell() {
         const conv = JSON.parse(raw);
         localStorage.removeItem('estimate-convert');
         if (conv?.items?.length) {
-          setCart(conv.items);
+          setCart(conv.items.map(normLine));
           if (conv.customerName) setNewCust(conv.customerName);
           if (conv.discount) setDisc(String(conv.discount));
           toast(`Estimate loaded: ${conv.items.length} items — dam miliye nin`, 'ok');
@@ -77,14 +94,25 @@ export function Sell() {
     if (p.stock <= 0) { toast(`${p.name} is out of stock`, 'err'); return; }
     pop(); buzz(10);
     setCart((c) => {
-      const f = c.find((l) => l.productId === p._id);
-      if (f) return c.map((l) => (l.productId === p._id ? { ...l, qty: l.qty + qty } : l));
-      return [...c, { productId: p._id, name: p.name, qty, rate: p.sellingPrice, stock: p.stock, unit: p.unit }];
+      const f = c.find((l) => l.productId === p._id && (l.unitKind || 'pack') === 'pack');
+      const line = { productId: p._id, name: p.name, qty, rate: p.sellingPrice, stock: p.stock, unit: p.unit, packSize: Math.max(1, Number(p.packSize || 1)), loosePrice: Number(p.loosePrice || 0), unitKind: 'pack' as const };
+      if (f) return c.map((l) => (l === f ? { ...l, qty: l.qty + qty } : l));
+      return [...c, line];
     });
   };
-  const setQty = (id: string, qty: number) => setCart((c) => qty <= 0 ? c.filter((l) => l.productId !== id) : c.map((l) => (l.productId === id ? { ...l, qty } : l)));
+  const setQty = (id: string, kind: 'pack' | 'piece', qty: number) => setCart((c) => qty <= 0 ? c.filter((l) => !(l.productId === id && l.unitKind === kind)) : c.map((l) => (l.productId === id && l.unitKind === kind ? { ...l, qty } : l)));
 
-  const subtotal = useMemo(() => cart.reduce((s, l) => s + l.qty * l.rate, 0), [cart]);
+  const setKind = (id: string, prevKind: 'pack' | 'piece', kind: 'pack' | 'piece') => setCart((c) => {
+    if (prevKind === kind) return c;
+    // merge into existing same-product+kind line if present
+    const moving = c.find((l) => l.productId === id && l.unitKind === prevKind);
+    if (!moving) return c;
+    const target = c.find((l) => l.productId === id && l.unitKind === kind);
+    if (target) return c.filter((l) => l !== moving).map((l) => (l === target ? { ...l, qty: l.qty + moving.qty } : l));
+    return c.map((l) => (l === moving ? { ...l, unitKind: kind } : l));
+  });
+
+  const subtotal = useMemo(() => r2(cart.reduce((s, l) => s + l.qty * lineRate(l), 0)), [cart]);
   const discount = useMemo(() => {
     const flat = Number(disc || 0);
     const pct = Math.min(100, Math.max(0, Number(discPct || 0)));
@@ -123,7 +151,7 @@ export function Sell() {
       else if (method === 'MIXED') { paid = mixSum; breakdown = (['CASH', 'UPI', 'BANK'] as const).filter((k) => Number(mix[k]) > 0).map((k) => ({ method: k, amount: Number(mix[k]), account: k === 'CASH' ? 'Cash Drawer' : account })); }
       else { breakdown = [{ method: upiMethod, amount: total, account }]; }
       const { data } = await api.post('/api/sales', {
-        items: cart.map((l) => ({ productId: l.productId, qty: l.qty })),
+        items: cart.map((l) => ({ productId: l.productId, qty: l.qty, unitKind: l.unitKind })),
         discount, paymentMethod: method === 'UPI' ? upiMethod : method,
         paymentBreakdown: breakdown, paid,
         customerId: customer?._id, customerName: customer?.name || newCust.trim() || undefined,
@@ -162,12 +190,15 @@ export function Sell() {
         <div className="grid-products">
           {items.map((p) => {
             const margin = p.purchasePrice > 0 ? Math.round(((p.sellingPrice - p.purchasePrice) / p.purchasePrice) * 100) : 0;
+            const ps = Math.max(1, Number(p.packSize || 1));
+            const pcRate = Number(p.loosePrice) > 0 ? Number(p.loosePrice) : r2(Number(p.sellingPrice) / ps);
             return (
               <div className="prod" key={p._id}>
                 <Img src={p.imageUrl} alt={p.name} />
                 <div className="p">
                   <span className="nm">{p.name}</span>
-                  <span className="pr"><b>{rs(p.sellingPrice)}</b><span>stk {p.stock}</span></span>
+                  <span className="pr"><b>{rs(p.sellingPrice)}{ps > 1 ? <small> /pkt</small> : ''}</b><span>stk {p.stock}</span></span>
+                  {ps > 1 && <span className="pr"><span>🔹 khuchra {rs(pcRate)} /pc</span></span>}
                   <div className={`stockbar${p.stock <= 0 ? ' out' : p.stock <= (p.minStock ?? 5) ? ' low' : ''}`}><i style={{ width: `${Math.min(100, Math.max(3, (p.stock / Math.max(1, (p.minStock ?? 5) * 4)) * 100))}%` }} /></div>
                   <span style={{ display: 'flex', gap: 4, alignItems: 'center', minHeight: 20 }}>
                     {p.stock <= 0 ? <span className="badge-out">Out</span> : p.stock <= (p.minStock ?? 5) ? <span className="badge-low">Low</span> : null}
@@ -189,9 +220,17 @@ export function Sell() {
             <button className="btn sm ghost" onClick={() => setCart([])}>Clear</button>
           </div>
           {cart.map((l) => (
-            <div key={l.productId} className="cartline">
-              <div className="nm"><b>{l.name}</b><small>{rs(l.rate)} × {l.qty} = {rs(l.qty * l.rate)}</small></div>
-              <QtyStepper qty={l.qty} onChange={(qq) => setQty(l.productId, qq)} />
+            <div key={`${l.productId}|${l.unitKind}`} className="cartline">
+              <div className="nm"><b>{l.name}</b>
+                {l.packSize > 1 && (
+                  <span style={{ display: 'flex', gap: 4, margin: '3px 0' }}>
+                    <button className={`chip${l.unitKind === 'pack' ? ' on' : ''}`} style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => setKind(l.productId, l.unitKind, 'pack')}>📦 pkt {rs(l.rate)}</button>
+                    <button className={`chip${l.unitKind === 'piece' ? ' on' : ''}`} style={{ padding: '4px 10px', fontSize: 12 }} onClick={() => setKind(l.productId, l.unitKind, 'piece')}>🔹 pc {rs(lineRate({ ...l, unitKind: 'piece' }))}</button>
+                  </span>
+                )}
+                <small>{rs(lineRate(l))} × {l.qty}{l.unitKind === 'piece' ? ' pcs' : l.packSize > 1 ? ' pkt' : ''} = {rs(r2(l.qty * lineRate(l)))}</small>
+              </div>
+              <QtyStepper qty={l.qty} onChange={(qq) => setQty(l.productId, l.unitKind, qq)} />
             </div>
           ))}
           <div className="row2" style={{ marginTop: 8 }}>
@@ -308,7 +347,7 @@ export function ReceiptSheet({ sale, onClose }: { sale: any; onClose: () => void
   const [thermal, setThermal] = useState(false);
   useEffect(() => { celebrateSale(); }, []);
   const waText = `🧾 *Swarup Stationery Store*\nReceipt: ${sale.receiptNumber}\n${sale.items.map((i: any) => `• ${i.name} x${i.qty} = ₹${i.lineTotal}`).join('\n')}\nTotal: ₹${sale.total} | Paid: ₹${sale.paid}${sale.due ? ` | Due: ₹${sale.due}` : ''}\nThank you! Visit again 🙏 ধন্যবাদ!`;
-  const rows = `${sale.items.map((i: any) => `<div class="r"><span>${i.name} x${i.qty}</span><span>Rs.${i.lineTotal}</span></div>`).join('')}`;
+  const rows = `${sale.items.map((i: any) => `<div class="r"><span>${i.name} x${i.qty}${(i.unitKind || 'pack') === 'piece' ? ' pcs' : ''}</span><span>Rs.${i.lineTotal}</span></div>`).join('')}`;
   const print = () => {
     const w = window.open('', '_blank', 'width=420');
     if (!w) { toast('Popup blocked — allow popups to print', 'err'); return; }
@@ -322,7 +361,7 @@ export function ReceiptSheet({ sale, onClose }: { sale: any; onClose: () => void
     <Sheet title="Sale completed ✓" onClose={onClose}>
       <div className="receipt pop-in">
         <div className="rh"><div style={{ fontSize: 26 }}>🪔</div><h3>Swarup Stationery Store</h3><div>{sale.receiptNumber}</div><small>{sale.transactionDate} {sale.transactionTime} IST • {sale.cashier}</small></div>
-        {sale.items.map((i: any, idx: number) => <div key={idx} className="rl"><span>{i.name} × {i.qty}</span><span>₹{i.lineTotal}</span></div>)}
+        {sale.items.map((i: any, idx: number) => <div key={idx} className="rl"><span>{i.name} × {i.qty}{(i.unitKind || 'pack') === 'piece' ? ' pcs' : ''}</span><span>₹{i.lineTotal}</span></div>)}
         <div className="rl"><span>Subtotal</span><span>₹{sale.subtotal}</span></div>
         {!!sale.discount && <div className="rl"><span>Discount</span><span>− ₹{sale.discount}</span></div>}
         <div className="rl rt"><span>Total</span><span>₹{sale.total}</span></div>
