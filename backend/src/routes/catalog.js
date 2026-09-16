@@ -3,7 +3,7 @@ const Category = require('../models/Category');
 const Supplier = require('../models/Supplier');
 const Purchase = require('../models/Purchase');
 const { SupplierPayment } = require('../models/Dues');
-const { auth, requirePerm } = require('../middleware/auth');
+const { auth, requirePerm, requireRole } = require('../middleware/auth');
 const { audit } = require('../middleware/common');
 const { istParts } = require('../utils/ist');
 
@@ -26,8 +26,7 @@ router.get('/categories', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-router.post('/categories', async (req, res, next) => {
-  try {
+router.post('/categories', async (req, res, next) => {  try {
     const { name, nameBn = '', icon = '' } = req.body;
     if (!name) return res.status(400).json({ error: 'Category name is required.' });
     const c = await Category.create({ name: String(name).trim(), nameBn, icon });
@@ -41,6 +40,19 @@ router.post('/categories', async (req, res, next) => {
 
 router.get('/suppliers', async (req, res, next) => {
   try { res.json(await Supplier.find().sort({ name: 1 }).limit(200)); } catch (e) { next(e); }
+});
+
+// Delete category (ADMIN): only when no product uses it.
+router.delete('/categories/:id', requireRole('ADMIN'), async (req, res, next) => {
+  try {
+    const c = await Category.findById(req.params.id);
+    if (!c) return res.status(404).json({ error: 'Category not found.' });
+    const used = await require('../models/Product').countDocuments({ category: c.name });
+    if (used > 0) return res.status(400).json({ error: `"${c.name}"-te ${used}-ta product ache — age ogulo soran.` });
+    await Category.deleteOne({ _id: c._id });
+    await audit(req.user, 'CATEGORY_DELETED', 'category', c._id, { name: c.name });
+    res.json({ ok: true });
+  } catch (e) { next(e); }
 });
 
 router.post('/suppliers', async (req, res, next) => {

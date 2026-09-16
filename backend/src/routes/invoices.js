@@ -6,7 +6,7 @@ const Purchase = require('../models/Purchase');
 const Supplier = require('../models/Supplier');
 const Category = require('../models/Category');
 const { InvoiceImport, Settings, Document } = require('../models/Misc');
-const { auth, requirePerm } = require('../middleware/auth');
+const { auth, requirePerm, requireRole } = require('../middleware/auth');
 const { audit } = require('../middleware/common');
 const { istParts } = require('../utils/ist');
 const { uploadBuffer, FOLDERS } = require('../services/storage');
@@ -125,6 +125,18 @@ router.post('/upload', upload.single('bill'), async (req, res, next) => {
 
 router.get('/', async (req, res, next) => {
   try { res.json(await InvoiceImport.find().sort({ createdAt: -1 }).limit(100)); } catch (e) { next(e); }
+});
+
+// Delete a staged import (ADMIN): committed bills can only be voided via purchase.
+router.delete('/:id', requireRole('ADMIN'), async (req, res, next) => {
+  try {
+    const doc = await InvoiceImport.findById(req.params.id);
+    if (!doc) return res.status(404).json({ error: 'Import not found.' });
+    if (doc.status === 'COMMITTED') return res.status(400).json({ error: 'Eta already purchase hoye geche — Purchase theke void koro.' });
+    await InvoiceImport.deleteOne({ _id: doc._id });
+    await audit(req.user, 'INVOICE_DISCARDED', 'invoice', doc._id, { supplier: doc.supplier });
+    res.json({ ok: true });
+  } catch (e) { next(e); }
 });
 
 // Commit: resolve/create products, create purchase, apply stock once, return summary.

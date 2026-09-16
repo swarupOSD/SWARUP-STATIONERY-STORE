@@ -279,8 +279,7 @@ async function check(name, fn) {
       const names = cats.data.map((x) => x.name);
       assert.ok(names.includes('Pooja Items') && names.includes('School Supplies'), 'new categories');
     });
-    await check('loose (khuchra) sale + purchasedBy/fundedBy', async () => {
-      // product: packet of 10, sell 125, loose 15
+    await check('loose (khuchra) sale + purchasedBy/fundedBy', async () => {      // product: packet of 10, sell 125, loose 15
       const pr = await call('POST', '/api/products', { name: 'Sweep Cig', category: 'Cigarettes', unit: 'packet', packSize: 10, purchasePrice: 100, sellingPrice: 125, loosePrice: 15, stock: 30, purchasedBy: 'Baba', fundedBy: 'Cash' });
       assert.equal(pr.status, 201);
       assert.equal(pr.data.purchasedBy, 'Baba');
@@ -304,6 +303,51 @@ async function check(name, fn) {
       // edit buyer/funder later
       const pe = await call('PATCH', `/api/products/${pid}`, { purchasedBy: 'Ma', fundedBy: 'Amar PhonePe', loosePrice: 16 });
       assert.equal(pe.status, 200); assert.equal(pe.data.purchasedBy, 'Ma');
+    });
+    await check('guarded deletes', async () => {
+      // product with history: blocked, then deactivate works
+      const has = await call('DELETE', `/api/products/${global.__pid}`);
+      assert.equal(has.status, 400); assert.ok(has.data.hasHistory);
+      const de = await call('PATCH', `/api/products/${global.__pid}`, { active: false });
+      assert.equal(de.status, 200);
+      const inv = await call('GET', '/api/products?active=false&limit=5');
+      assert.ok(inv.data.items.some((x) => String(x._id) === String(global.__pid)));
+      // fresh product with no history: deletable
+      const fresh = await call('POST', '/api/products', { name: 'Sweep Doomed', category: 'Other', unit: 'piece', packSize: 1, purchasePrice: 1, sellingPrice: 2, stock: 0 });
+      assert.equal(fresh.status, 201);
+      const del = await call('DELETE', `/api/products/${fresh.data._id}`);
+      assert.equal(del.status, 200);
+      const gone = await call('GET', `/api/products/${fresh.data._id}`);
+      assert.equal(gone.status, 404);
+      // customer with due: blocked; clean customer: deletable
+      const c = await call('POST', '/api/customers', { name: 'Sweep Del' });
+      const cdel = await call('DELETE', `/api/customers/${c.data._id}`);
+      assert.equal(cdel.status, 200);
+      // personal purchase with stock: delete reverses
+      const pp = await call('POST', '/api/personal-purchases', { owner: 'My Purchase', productName: 'Sweep PP', productId: global.__pid, qty: 7, price: 5, addToStock: true });
+      assert.equal(pp.status, 201);
+      const sBefore = (await call('GET', `/api/products/${global.__pid}`)).data.stock;
+      const pdel = await call('DELETE', `/api/personal-purchases/${pp.data._id}`);
+      assert.equal(pdel.status, 200);
+      assert.equal((await call('GET', `/api/products/${global.__pid}`)).data.stock, sBefore - 7);
+      // category in use blocked; fresh one deletable
+      const catUsed = await call('POST', '/api/categories', { name: 'SweepCatX' });
+      // attach a product then try delete
+      const px = await call('POST', '/api/products', { name: 'Sweep CatProd', category: 'SweepCatX', unit: 'piece', packSize: 1, purchasePrice: 1, sellingPrice: 2, stock: 0 });
+      const cbad = await call('DELETE', `/api/categories/${catUsed.data._id}`);
+      assert.equal(cbad.status, 400);
+      await call('DELETE', `/api/products/${px.data._id}`);
+      const cok = await call('DELETE', `/api/categories/${catUsed.data._id}`);
+      assert.equal(cok.status, 200);
+      // staged invoice discardable
+      const im = await call('GET', '/api/invoices');
+      if (im.data.length) {
+        const pend = im.data.find((x) => x.status !== 'COMMITTED');
+        if (pend) {
+          const dd = await call('DELETE', `/api/invoices/${pend._id}`);
+          assert.equal(dd.status, 200);
+        }
+      }
     });
   }
 

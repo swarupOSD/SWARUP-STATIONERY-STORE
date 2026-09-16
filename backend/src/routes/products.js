@@ -1,8 +1,10 @@
 const express = require('express');
 const Product = require('../models/Product');
+const Sale = require('../models/Sale');
+const Purchase = require('../models/Purchase');
 const { PriceHistory, Settings } = require('../models/Misc');
 const StockMovement = require('../models/StockMovement');
-const { auth, requirePerm } = require('../middleware/auth');
+const { auth, requirePerm, requireRole } = require('../middleware/auth');
 const { audit } = require('../middleware/common');
 const { istParts } = require('../utils/ist');
 const { previewImageUrl } = require('../services/imageGuard');
@@ -35,6 +37,7 @@ router.get('/', async (req, res, next) => {
     const filter = {};
     if (active === 'true') filter.active = true;
     else if (active === 'false') filter.active = false;
+    // active=all (or anything else) => no active filter
     if (category) filter.category = category;
     if (needsPricing === '1') filter.needsPricing = true;
     if (q) {
@@ -158,6 +161,26 @@ router.post('/:id/take', requirePerm('products.update'), async (req, res, next) 
     await StockMovement.create({ productId: p._id, productName: p.name, type: 'PERSONAL_USE', quantityDelta: -baseQty, before, after, reference: `take-${who}`, reason: `${who} nilo${reason ? ': ' + String(reason).slice(0, 100) : ''}`, date, time, user: req.user.username });
     await audit(req.user, 'STOCK_TAKEN', 'product', p._id, { who, qty: q, before, after });
     res.json(p);
+  } catch (e) { next(e); }
+});
+
+// Delete product (ADMIN): only if it has NO history. Else deactivate instead.
+router.delete('/:id', requireRole('ADMIN'), async (req, res, next) => {
+  try {
+    const p = await Product.findById(req.params.id);
+    if (!p) return res.status(404).json({ error: 'Product not found.' });
+    const [moves, sales, buys] = await Promise.all([
+      StockMovement.countDocuments({ productId: p._id, type: { $ne: 'OPENING_STOCK' } }),
+      Sale.countDocuments({ 'items.productId': p._id }),
+      Purchase.countDocuments({ 'items.productId': p._id }),
+    ]);
+    if (moves > 0 || sales > 0 || buys > 0) {
+      return res.status(400).json({ error: `"${p.name}"-er bikri/kena history ache — delete hobe na. Bodle Inactive kore dao, hisab safe thakbe.`, hasHistory: true });
+    }
+    await StockMovement.deleteMany({ productId: p._id });
+    await Product.deleteOne({ _id: p._id });
+    await audit(req.user, 'PRODUCT_DELETED', 'product', p._id, { name: p.name });
+    res.json({ ok: true });
   } catch (e) { next(e); }
 });
 

@@ -2,7 +2,7 @@ const express = require('express');
 const Customer = require('../models/Customer');
 const Payment = require('../models/Payment');
 const Sale = require('../models/Sale');
-const { auth, requirePerm } = require('../middleware/auth');
+const { auth, requirePerm, requireRole } = require('../middleware/auth');
 const { audit } = require('../middleware/common');
 const { istParts } = require('../utils/ist');
 const { header, footer, sendPdf } = require('../services/pdf');
@@ -44,6 +44,23 @@ router.patch('/:id', requirePerm('customers.create'), async (req, res, next) => 
     await c.save();
     await audit(req.user, 'CUSTOMER_UPDATED', 'customer', c._id, { name: c.name });
     res.json(c);
+  } catch (e) { next(e); }
+});
+
+// Delete customer (ADMIN): only with zero due and no bills/payments.
+router.delete('/:id', requireRole('ADMIN'), async (req, res, next) => {
+  try {
+    const c = await Customer.findById(req.params.id);
+    if (!c) return res.status(404).json({ error: 'Customer not found.' });
+    if (c.totalDue > 0) return res.status(400).json({ error: `"${c.name}"-er ${c.totalDue} taka baki — age clear koro.` });
+    const [sales, pays] = await Promise.all([
+      Sale.countDocuments({ customerId: c._id }),
+      Payment.countDocuments({ customerId: c._id }),
+    ]);
+    if (sales > 0 || pays > 0) return res.status(400).json({ error: `"${c.name}"-er len-den history ache — delete hobe na.` });
+    await Customer.deleteOne({ _id: c._id });
+    await audit(req.user, 'CUSTOMER_DELETED', 'customer', c._id, { name: c.name });
+    res.json({ ok: true });
   } catch (e) { next(e); }
 });
 

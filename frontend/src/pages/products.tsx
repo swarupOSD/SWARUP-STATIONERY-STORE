@@ -8,11 +8,12 @@ export function Products() {
   const dq = useDebounce(q);
   const [cat, setCat] = useState('');
   const [cats, setCats] = useState<any[]>([]);
-  const [filter, setFilter] = useState<'all' | 'low' | 'out' | 'pricing'>('all');
+  const [filter, setFilter] = useState<'all' | 'low' | 'out' | 'pricing' | 'inactive'>('all');
   const [sort, setSort] = useState('name');
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [detail, setDetail] = useState<any>(null);
+  const [showCats, setShowCats] = useState(false);
 
   useEffect(() => { api.get('/api/categories').then((r) => setCats(r.data)).catch(() => {}); }, []);
   const qp = new URLSearchParams(location.search).get('needsPricing');
@@ -20,7 +21,7 @@ export function Products() {
   const load = async () => {
     setLoading(true);
     try {
-      const { data } = await api.get('/api/products', { params: { q: dq, category: cat, limit: 120, ...(filter === 'pricing' ? { needsPricing: '1' } : {}) } });
+      const { data } = await api.get('/api/products', { params: { q: dq, category: cat, limit: 120, active: filter === 'inactive' ? 'false' : 'true', ...(filter === 'pricing' ? { needsPricing: '1' } : {}) } });
       let list = data.items;
       if (filter === 'low') list = list.filter((p: any) => p.stock > 0 && p.stock <= (p.minStock ?? 5));
       if (filter === 'out') list = list.filter((p: any) => p.stock <= 0);
@@ -47,6 +48,8 @@ export function Products() {
         <button className={`chip${filter === 'low' ? ' on' : ''}`} onClick={() => setFilter(filter === 'low' ? 'all' : 'low')}>⚠️ Low</button>
         <button className={`chip${filter === 'out' ? ' on' : ''}`} onClick={() => setFilter(filter === 'out' ? 'all' : 'out')}>🚫 Out</button>
         <button className={`chip${filter === 'pricing' ? ' on' : ''}`} onClick={() => setFilter(filter === 'pricing' ? 'all' : 'pricing')}>🏷️ Set price</button>
+        <button className={`chip${filter === 'inactive' ? ' on' : ''}`} onClick={() => setFilter(filter === 'inactive' ? 'all' : 'inactive')}>🚫 Inactive</button>
+        <button className="chip" onClick={() => setShowCats(true)}>🗂 Categories</button>
       </div>
       <p style={{ color: 'var(--muted)', fontSize: 13 }}>{items.length} products • stock value ≈ {rs(Math.round(stockVal))}</p>
       {loading ? <Skel n={4} /> : items.length === 0 ? <Empty emoji="📦" title="No products" sub="Add your first product to start selling." action={<a className="btn primary" href="/products/new">+ Add product</a>} /> : (
@@ -64,7 +67,38 @@ export function Products() {
         </div>
       )}
       {detail && <ProductDetail p={detail} onClose={() => { setDetail(null); load(); }} />}
+      {showCats && <CategoryManager onClose={() => { setShowCats(false); api.get('/api/categories').then((r) => setCats(r.data)).catch(() => {}); }} />}
     </div>
+  );
+}
+
+function CategoryManager({ onClose }: { onClose: () => void }) {
+  const toast = useToast();
+  const confirm = useConfirm();
+  const [cats, setCats] = useState<any[]>([]);
+  const [nm, setNm] = useState('');
+  const load = async () => { try { const { data } = await api.get('/api/categories'); setCats(data); } catch (e: any) { toast(errMsg(e), 'err'); } };
+  useEffect(() => { load(); }, []);
+  const add = async () => {
+    if (!nm.trim()) return;
+    try { await api.post('/api/categories', { name: nm.trim() }); setNm(''); toast('Category added ✓', 'ok'); load(); }
+    catch (e: any) { toast(errMsg(e), 'err'); }
+  };
+  const del = async (c: any) => {
+    if (!await confirm({ title: `"${c.name}" delete?`, body: 'Product thakle delete hobe na.', okText: 'Delete' })) return;
+    try { await api.delete(`/api/categories/${c._id}`); toast('Deleted ✓', 'ok'); load(); }
+    catch (e: any) { toast(errMsg(e), 'err'); }
+  };
+  return (
+    <Sheet title="🗂 Categories" onClose={onClose}>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <input value={nm} onChange={(e) => setNm(e.target.value)} placeholder="Notun category…" />
+        <button className="btn primary" onClick={add}>Add</button>
+      </div>
+      {cats.map((c) => (
+        <div key={c._id} className="kv"><span>{c.icon || '🏷️'} {c.name}</span><button className="btn sm ghost" style={{ color: 'var(--rose-tx)' }} onClick={() => del(c)}>Delete</button></div>
+      ))}
+    </Sheet>
   );
 }
 
@@ -103,7 +137,19 @@ function ProductDetail({ p, onClose }: { p: any; onClose: () => void }) {
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: 20, fontWeight: 800 }}>{rs(p.sellingPrice)} <small style={{ color: 'var(--muted)', fontWeight: 400 }}>cost {rs(p.purchasePrice)}</small></div>
           <div style={{ marginTop: 4 }}>{p.stock <= 0 ? <span className="badge-out">OUT OF STOCK</span> : p.stock <= (p.minStock ?? 5) ? <span className="badge-low">LOW STOCK</span> : <span className="badge-ok">IN STOCK</span>} <small> {p.stock} {p.unit} • min {p.minStock}</small></div>
-          <div style={{ marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap' }}><a className="btn sm" href={`/products/${p._id}`}>✏️ Edit</a><button className="btn sm gold" onClick={() => setLabels(true)}>🏷️ Labels</button></div>
+          <div style={{ marginTop: 6, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            <a className="btn sm" href={`/products/${p._id}`}>✏️ Edit</a>
+            <button className="btn sm gold" onClick={() => setLabels(true)}>🏷️ Labels</button>
+            <button className="btn sm ghost" onClick={async () => {
+              try { await api.patch(`/api/products/${p._id}`, { active: !p.active }); toast(p.active ? 'Inactive holo — dokane dekhabe na' : 'Active holo ✓', 'ok'); onClose(); }
+              catch (e: any) { toast(errMsg(e), 'err'); }
+            }}>{p.active ? '🚫 Inactive koro' : '✅ Active koro'}</button>
+            <button className="btn sm ghost" style={{ color: 'var(--rose-tx)' }} onClick={async () => {
+              if (!await confirm({ title: `"${p.name}" delete?`, body: 'History thakle delete hobe na — tokhon Inactive koro.', okText: 'Delete' })) return;
+              try { await api.delete(`/api/products/${p._id}`); toast('Deleted ✓', 'ok'); onClose(); }
+              catch (e: any) { toast(errMsg(e), 'err'); }
+            }}>🗑 Delete</button>
+          </div>
         </div>
       </div>
       <div className="kv"><span>Category</span><span>{p.category}{p.subcategory ? ` / ${p.subcategory}` : ''}</span></div>

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import api, { errMsg } from '../api/client';
-import { Empty, HBarChart, PageHead, QtyStepper, Sheet, Skel, SplitBar, rs, useToast } from '../components/ui';
+import { Empty, HBarChart, PageHead, QtyStepper, Sheet, Skel, SplitBar, rs, useConfirm, useToast } from '../components/ui';
 
 const istToday = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
@@ -125,6 +125,7 @@ function DeadStock() {
 
 export function Invoices() {
   const toast = useToast();
+  const confirm = useConfirm();
   const [file, setFile] = useState<File | null>(null);
   const [rawText, setRawText] = useState('');
   const [result, setResult] = useState<any>(null);
@@ -246,7 +247,7 @@ export function Invoices() {
         </Sheet>
       )}
       <div className="section-t">Past imports</div>
-      {list.map((l: any) => <div key={l._id} className="lrow"><span style={{ fontSize: 20 }}>{l.docType === 'flipkart' ? '🛍️' : '🧾'}</span><div className="grow"><b className="t">{l.supplier || '—'} • {l.invoiceNumber || l.orderNumber || '—'}</b><small>{rs(l.grandTotal)} • {l.status}</small></div></div>)}
+      {list.map((l: any) => <div key={l._id} className="lrow"><span style={{ fontSize: 20 }}>{l.docType === 'flipkart' ? '🛍️' : '🧾'}</span><div className="grow"><b className="t">{l.supplier || '—'} • {l.invoiceNumber || l.orderNumber || '—'}</b><small>{rs(l.grandTotal)} • {l.status}</small></div>{l.status !== 'COMMITTED' && <button className="btn sm ghost" style={{ color: 'var(--rose-tx)' }} onClick={async () => { if (!await confirm({ title: 'Discard this bill?', okText: 'Discard' })) return; try { await api.delete(`/api/invoices/${l._id}`); toast('Discarded ✓', 'ok'); api.get('/api/invoices').then((r) => setList(r.data)).catch(() => {}); } catch (e: any) { toast(errMsg(e), 'err'); } }}>✕</button>}</div>)}
     </div>
   );
 }
@@ -281,6 +282,12 @@ export function Personal() {
     } catch (e: any) { toast(errMsg(e), 'err'); }
   };
   const month = items.reduce((s, p) => s + (p.total || 0), 0);
+  const confirm = useConfirm();
+  const delPersonal = async (p: any) => {
+    if (!await confirm({ title: `"${p.productName}" delete?`, body: p.addToStock ? 'Stock-e dhukechilo — bad diye delete hobe.' : undefined, okText: 'Delete' })) return;
+    try { await api.delete(`/api/personal-purchases/${p._id}`); toast('Deleted ✓', 'ok'); load(); }
+    catch (e: any) { toast(errMsg(e), 'err'); }
+  };
   return (
     <div className="page">
       <PageHead title="Personal purchases" emoji="👛" />
@@ -299,7 +306,7 @@ export function Personal() {
         <div className="totals"><div className="tr grand"><span>Total</span><span>{rs(Number(f.qty || 0) * Number(f.price || 0))}</span></div></div>
         <button className="btn primary block" style={{ marginTop: 10 }} onClick={save}>✓ Save</button>
       </div>
-      {items.map((p: any) => <div key={p._id} className="lrow"><span style={{ fontSize: 20 }}>🧺</span><div className="grow"><b className="t">{p.productName} × {p.qty}</b><small>{p.purchaseDate} {p.purchaseTime}{p.addToStock ? ' • +stock' : ''}{p.method ? ` • ${p.method}` : ''}{p.account ? ` • ${p.account}` : ''}</small></div><b>{rs(p.total)}</b></div>)}
+      {items.map((p: any) => <div key={p._id} className="lrow"><span style={{ fontSize: 20 }}>🧺</span><div className="grow"><b className="t">{p.productName} × {p.qty}</b><small>{p.purchaseDate} {p.purchaseTime}{p.addToStock ? ' • +stock' : ''}{p.method ? ` • ${p.method}` : ''}{p.account ? ` • ${p.account}` : ''}</small></div><b>{rs(p.total)}</b><button className="btn sm ghost" style={{ color: 'var(--rose-tx)' }} onClick={() => delPersonal(p)}>✕</button></div>)}
     </div>
   );
 }

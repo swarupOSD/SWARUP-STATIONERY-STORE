@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import api, { errMsg } from '../api/client';
-import { ACCOUNTS, Avatar, Empty, PageHead, Seg, Sheet, Skel, rs, useConfirm, useToast, waLink } from '../components/ui';
+import { ACCOUNTS, Avatar, Empty, PageHead, Seg, Sheet, Skel, getJSON, rs, useConfirm, useToast, waLink } from '../components/ui';
 
 export function Purchase() {
   const toast = useToast();
@@ -251,6 +251,13 @@ export function CustomerDetail({ id }: { id: string }) {  const toast = useToast
         {c.phone && <a className="btn sm" href={`tel:${c.phone}`}>📞 Call</a>}
         {c.phone && <a className="btn sm green" href={waLink(c.phone, reminder)} target="_blank" rel="noreferrer">💬 Remind</a>}
         <button className="btn sm ghost" onClick={() => { setELim(String(c.creditLimit || '')); setEPhone(c.phone || ''); setEArea(c.area || ''); setShowEdit(true); }}>✏️</button>
+        {getJSON('user', {} as any)?.role === 'ADMIN' && (
+          <button className="btn sm ghost" style={{ color: 'var(--rose-tx)' }} onClick={async () => {
+            if (!await confirm({ title: `"${c.name}" delete?`, body: 'Due/bill thakle delete hobe na.', okText: 'Delete' })) return;
+            try { await api.delete(`/api/customers/${id}`); toast('Customer deleted ✓', 'ok'); location.href = '/khata'; }
+            catch (e: any) { toast(errMsg(e), 'err'); }
+          }}>🗑</button>
+        )}
       </PageHead>
       {c.creditLimit > 0 && <div className={`card`} style={{ borderLeft: `4px solid ${c.totalDue >= c.creditLimit ? 'var(--rose-tx)' : 'var(--gold)'}` }}><small>💳 Credit limit {rs(c.creditLimit)} • available {rs(Math.max(0, c.creditLimit - c.totalDue))}</small></div>}
       {showEdit && (

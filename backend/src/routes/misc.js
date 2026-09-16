@@ -109,6 +109,31 @@ router.post('/personal-purchases', auth, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// Delete personal purchase (ADMIN): reverses shop stock if it was added.
+router.delete('/personal-purchases/:id', requireRole('ADMIN'), async (req, res, next) => {
+  try {
+    const doc = await PersonalPurchase.findById(req.params.id);
+    if (!doc) return res.status(404).json({ error: 'Not found.' });
+    if (doc.stockApplied && doc.productId) {
+      const p = await Product.findById(doc.productId);
+      if (p) {
+        const back = Math.round(Number(doc.qty || 0));
+        const settings = await Settings.findOne({ key: 'shop' });
+        if (p.stock - back < 0 && !settings?.negativeStockAllowed) {
+          return res.status(400).json({ error: `Stock-e matro ${p.stock} ache — age bikri hoye geche, delete hobe na.` });
+        }
+        const before = p.stock, after = before - back;
+        p.stock = after; await p.save();
+        const { date, time } = istParts();
+        await StockMovement.create({ productId: p._id, productName: p.name, type: 'ADJUSTMENT', quantityDelta: -back, before, after, reference: String(doc._id), reason: 'Personal purchase deleted — stock reversed', date, time, user: req.user.username });
+      }
+    }
+    await PersonalPurchase.deleteOne({ _id: doc._id });
+    await audit(req.user, 'PERSONAL_PURCHASE_DELETED', 'personalPurchase', doc._id, { productName: doc.productName });
+    res.json({ ok: true });
+  } catch (e) { next(e); }
+});
+
 // ---- Documents library ----
 router.get('/documents', auth, async (req, res, next) => {
   try {
