@@ -93,6 +93,7 @@ router.post('/', requirePerm('products.create'), async (req, res, next) => {
       unit: b.unit || t.unit, packSize: Math.max(1, Number(b.packSize || t.packSize || 1)),
       supplier: b.supplier || '', brand: b.brand || '', tax: Number(b.tax || 0),
       discount: Number(b.discount || 0), notes: b.notes || '', active: b.active !== false,
+      needsPricing: b.needsPricing === true,
     });
     const { date, time } = istParts();
     await StockMovement.create({ productId: doc._id, productName: doc.name, type: 'OPENING_STOCK', quantityDelta: doc.stock, before: 0, after: doc.stock, reference: 'create', reason: 'Opening stock', date, time, user: req.user.username });
