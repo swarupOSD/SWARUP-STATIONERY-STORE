@@ -19,7 +19,7 @@ function fingerprint(supplier, invoiceNumber, orderNumber, grandTotal) {
 
 router.post('/', requirePerm('purchases.create'), async (req, res, next) => {
   try {
-    const { supplier = '', supplierId = null, invoiceNumber = '', orderNumber = '', source = 'Local Shop', owner = 'Shop', items = [], discount = 0, tax = 0, shipping = 0, paid = 0, addToStock = true, billUrl = '', billPublicId = '' } = req.body;
+    const { supplier = '', supplierId = null, invoiceNumber = '', orderNumber = '', source = 'Local Shop', owner = 'Shop', items = [], discount = 0, tax = 0, shipping = 0, paid = 0, addToStock = true, billUrl = '', billPublicId = '', payMethod = '', fundedBy = '' } = req.body;
     if (!items.length) return res.status(400).json({ error: 'Add at least one item.' });
     const { date, time } = istParts();
     const closed = await DailyClosing.findOne({ date });
@@ -49,6 +49,8 @@ router.post('/', requirePerm('purchases.create'), async (req, res, next) => {
       invoiceNumber: inv, orderNumber, supplier, supplierId: supplierId || null, source, owner,
       items: norm, subtotal, discount: Number(discount || 0), tax: Number(tax || 0), shipping: Number(shipping || 0),
       grandTotal, paid: Number(paid || 0), due: round2(Math.max(0, grandTotal - Number(paid || 0))),
+      payMethod: ['', 'CASH', 'UPI', 'BANK', 'OTHER'].includes(payMethod) ? payMethod : '',
+      fundedBy: String(fundedBy || '').slice(0, 60),
       addToStock: Boolean(addToStock), billUrl, billPublicId, fingerprint: fp,
       purchaseDate: date, purchaseTime: time, createdBy: req.user.username,
     });

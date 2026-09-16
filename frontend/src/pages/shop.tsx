@@ -16,6 +16,8 @@ export function Purchase() {
   const [addStock, setAddStock] = useState(true);
   const [billFile, setBillFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
+  const [payMethod, setPayMethod] = useState('');
+  const [fundedBy, setFundedBy] = useState('');
   const [history, setHistory] = useState<any[]>([]);
   const [detailId, setDetailId] = useState<string | null>(null);
   const openDetail = (id: string) => setDetailId(id);
@@ -36,9 +38,9 @@ export function Purchase() {
         const up = await api.post('/api/uploads', fd);
         billUrl = up.data.url; billPublicId = up.data.publicId;
       }
-      const { data } = await api.post('/api/purchases', { supplier, invoiceNumber: invoice, source, owner, addToStock: addStock, billUrl, billPublicId, items: lines });
+      const { data } = await api.post('/api/purchases', { supplier, invoiceNumber: invoice, source, owner, addToStock: addStock, billUrl, billPublicId, items: lines, payMethod, fundedBy: fundedBy || (payMethod === 'CASH' ? 'Cash' : '') });
       toast(`Purchase saved ✓ ${data.invoiceNumber}`, 'ok');
-      setLines([]); setInvoice(''); setBillFile(null); loadHist(); find('');
+      setLines([]); setInvoice(''); setBillFile(null); setPayMethod(''); setFundedBy(''); loadHist(); find('');
     } catch (e: any) { toast(errMsg(e), 'err'); } finally { setBusy(false); }
   };
   const voidOne = async (id: string, inv: string) => {
@@ -76,6 +78,12 @@ export function Purchase() {
           </div>
         ))}
         <label>Bill photo (optional)</label><input type="file" accept="image/*,.pdf" capture="environment" onChange={(e) => setBillFile(e.target.files?.[0] || null)} />
+        <label>Kon takay kinle? (cash na online)</label>
+        <div className="chips">{['', 'CASH', 'UPI', 'BANK'].map((m) => <button key={m} className={`chip${payMethod === m ? ' on' : ''}`} onClick={() => setPayMethod(m)}>{m === '' ? '—' : m}</button>)}</div>
+        {(payMethod === 'UPI' || payMethod === 'BANK') && (<><label>Kar account theke?</label>
+          <div className="chips">{['Amar PhonePe', 'Mar PhonePe', 'Babar PhonePe', 'Bank', 'Cash'].map((a) => <button key={a} className={`chip${fundedBy === a ? ' on' : ''}`} onClick={() => setFundedBy(a)}>{a}</button>)}</div></>)}
+        {payMethod === 'CASH' && (<><label>Kar cash?</label>
+          <div className="chips">{['Cash', 'Amar Cash', 'Mar Cash', 'Babar Cash'].map((a) => <button key={a} className={`chip${(fundedBy || 'Cash') === a ? ' on' : ''}`} onClick={() => setFundedBy(a)}>{a}</button>)}</div></>)}
         <label style={{ display: 'flex', gap: 8, alignItems: 'center' }}><input type="checkbox" checked={addStock} onChange={(e) => setAddStock(e.target.checked)} style={{ width: 22 }} /> Add to shop stock <small>(increases stock once)</small></label>
         <div className="totals" style={{ marginTop: 8 }}><div className="tr grand"><span>Total</span><span>{rs(total)}</span></div></div>
         <button className="btn primary block" style={{ marginTop: 10 }} onClick={submit} disabled={busy}>{busy ? 'Saving…' : `✓ Save purchase ${rs(total)}`}</button>
@@ -103,6 +111,7 @@ function PurchaseDetail({ id, onClose, onVoid }: { id: string; onClose: () => vo
       {p.orderNumber && <div className="kv"><span>Order</span><span>{p.orderNumber}</span></div>}
       <div className="kv"><span>Date</span><span>{p.purchaseDate} {p.purchaseTime}</span></div>
       <div className="kv"><span>By</span><span>{p.createdBy}</span></div>
+      {(p.payMethod || p.fundedBy) && <div className="kv"><span>Kon takay</span><span>{[p.payMethod, p.fundedBy].filter(Boolean).join(' • ')}</span></div>}
       <div className="table-wrap" style={{ marginTop: 8 }}><table><thead><tr><th>Item</th><th>Qty</th><th>Buy ₹</th><th>Total</th></tr></thead>
         <tbody>{p.items.map((it: any, i: number) => <tr key={i}><td>{it.name}</td><td>{it.qty}</td><td>{rs(it.unitPrice)}</td><td>{rs(it.lineTotal)}</td></tr>)}</tbody>
       </table></div>

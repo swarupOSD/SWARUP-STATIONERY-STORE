@@ -25,6 +25,8 @@ const PurchaseSchema = new mongoose.Schema({
   grandTotal: { type: Number, required: true, min: 0 },
   paid: { type: Number, default: 0 },
   due: { type: Number, default: 0 },
+  payMethod: { type: String, enum: ['', 'CASH', 'UPI', 'BANK', 'OTHER'], default: '' }, // cash na online
+  fundedBy: { type: String, default: '' }, // kar taka: Cash / Amar PhonePe / ...
   addToStock: { type: Boolean, default: true },
   billUrl: { type: String, default: '' },
   billPublicId: { type: String, default: '' },
