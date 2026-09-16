@@ -130,17 +130,23 @@ export function Khata() {
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
   const [nm, setNm] = useState(''); const [ph, setPh] = useState(''); const [lim, setLim] = useState('');
+  const [ar, setAr] = useState('');
+  const [areas, setAreas] = useState<string[]>([]);
+  const [areaF, setAreaF] = useState('');
   const [overdue, setOverdue] = useState<any[]>([]);
   const load = async () => {
     setLoading(true);
-    try { const { data } = await api.get('/api/customers', { params: { q, filter, limit: 100 } }); setItems(data.items); }
+    try { const { data } = await api.get('/api/customers', { params: { q, filter, area: areaF, limit: 100 } }); setItems(data.items); }
     catch (e: any) { toast(errMsg(e), 'err'); } finally { setLoading(false); }
   };
-  useEffect(() => { load(); }, [filter]);
-  useEffect(() => { api.get('/api/customers/dues/overdue').then((r) => setOverdue(r.data)).catch(() => {}); }, []);
+  useEffect(() => { load(); }, [filter, areaF]);
+  useEffect(() => {
+    api.get('/api/customers/dues/overdue').then((r) => setOverdue(r.data)).catch(() => {});
+    api.get('/api/customers/meta/areas').then((r) => setAreas(r.data)).catch(() => {});
+  }, []);
   const addCust = async () => {
     if (!nm.trim()) { toast('Enter customer name', 'err'); return; }
-    try { await api.post('/api/customers', { name: nm.trim(), phone: ph.trim(), creditLimit: Number(lim || 0) }); setNm(''); setPh(''); setLim(''); setShowAdd(false); toast('Customer added ✓', 'ok'); load(); }
+    try { await api.post('/api/customers', { name: nm.trim(), phone: ph.trim(), area: ar.trim(), creditLimit: Number(lim || 0) }); setNm(''); setPh(''); setLim(''); setAr(''); setShowAdd(false); toast('Customer added ✓', 'ok'); load(); }
     catch (e: any) { toast(errMsg(e), 'err'); }
   };
   const totalDue = items.reduce((s, c) => s + (c.totalDue || 0), 0);
@@ -156,6 +162,12 @@ export function Khata() {
         <button className="btn" onClick={load}>Go</button>
       </div>
       <Seg value={filter} onChange={setFilter} options={[{ v: 'all', label: 'All' }, { v: 'due', label: 'Due' }, { v: 'paid', label: 'Paid' }]} />
+      {areas.length > 0 && (
+        <div className="chips" style={{ marginTop: 8 }}>
+          <button className={`chip${!areaF ? ' on' : ''}`} onClick={() => setAreaF('')}>Sob para</button>
+          {areas.map((a) => <button key={a} className={`chip${areaF === a ? ' on' : ''}`} onClick={() => setAreaF(areaF === a ? '' : a)}>{a}</button>)}
+        </div>
+      )}
       {overdue.length > 0 && (
         <div style={{ marginTop: 10 }}>
           <div className="section-t">⏰ Takada — kobe debe chhilo</div>
@@ -172,7 +184,7 @@ export function Khata() {
         items.map((c) => (
           <a key={c._id} href={`/khata/${c._id}`} className="lrow">
             <Avatar name={c.name} gold={c.totalDue > 0} />
-            <div className="grow"><b className="t">{c.name}</b><small>{c.phone || '—'} • bought {rs(c.totalPurchased)}{c.creditLimit > 0 ? ` • limit ${rs(c.creditLimit)}` : ''}</small></div>
+            <div className="grow"><b className="t">{c.name}</b><small>{c.phone || '—'}{c.area ? ` • 📍 ${c.area}` : ''} • bought {rs(c.totalPurchased)}{c.creditLimit > 0 ? ` • limit ${rs(c.creditLimit)}` : ''}</small></div>
             <div style={{ textAlign: 'right' }}><div className={`due-amt ${c.totalDue > 0 ? 'neg' : 'zero'}`}>{c.totalDue > 0 ? rs(c.totalDue) : '✓ Paid'}</div></div>
           </a>
         ))}
@@ -180,6 +192,7 @@ export function Khata() {
         <Sheet title="New customer" onClose={() => setShowAdd(false)}>
           <label>Name *</label><input value={nm} onChange={(e) => setNm(e.target.value)} placeholder="e.g. Rahul" />
           <label>Phone (for call / WhatsApp)</label><input value={ph} onChange={(e) => setPh(e.target.value)} inputMode="tel" placeholder="98XXXXXXXX" />
+          <label>Para / area (route-wise takada)</label><input list="arealist" value={ar} onChange={(e) => setAr(e.target.value)} placeholder="e.g. Station para" /><datalist id="arealist">{areas.map((a) => <option key={a} value={a} />)}</datalist>
           <label>Credit limit ₹ (0 = unlimited due)</label><input value={lim} onChange={(e) => setLim(e.target.value)} inputMode="numeric" placeholder="e.g. 500" />
           <button className="btn primary block" style={{ marginTop: 12 }} onClick={addCust}>✓ Add to Khata</button>
         </Sheet>
@@ -188,8 +201,16 @@ export function Khata() {
   );
 }
 
-export function CustomerDetail({ id }: { id: string }) {
-  const toast = useToast();
+function printDueSlip(c: any, sales: any[]) {
+  const dues = (sales || []).filter((s: any) => s.due > 0);
+  const w = window.open('', '_blank', 'width=420');
+  if (!w) return;
+  const r = (k: string, v: string) => `<div class="r"><span>${k}</span><span>${v}</span></div>`;
+  w.document.write(`<html><head><title>Due slip — ${c.name}</title><style>@page{size:80mm auto;margin:2mm}body{font-family:monospace;font-size:11px;width:72mm;margin:0;padding:2mm;color:#000}h3{text-align:center;font-size:13px;margin:2px 0}.c{text-align:center}.r{display:flex;justify-content:space-between}hr{border-top:1px dashed #000;margin:4px 0}</style></head><body><h3>Swarup Stationery Store</h3><p class="c">BAKI SLIP<br>${c.name}${c.phone ? ' • ' + c.phone : ''}<br>${new Date().toLocaleDateString('en-IN')}</p><hr>${dues.map((s: any) => `<div class="r"><span>${s.receiptNumber}${s.dueDate ? ' (' + s.dueDate + ')' : ''}</span><span>Rs.${s.due}</span></div>`).join('') || '<p class=c>No dues</p>'}<hr>${r('Total bought', 'Rs.' + c.totalPurchased)}${r('Total paid', 'Rs.' + c.totalPaid)}<div class="r"><b>BAKI</b><b>Rs.${c.totalDue}</b></div><p class="c">Doya kore taratari deben 🙏</p><script>onload=()=>{print();}</script></body></html>`);
+  w.document.close();
+}
+
+export function CustomerDetail({ id }: { id: string }) {  const toast = useToast();
   const confirm = useConfirm();
   const [d, setD] = useState<any>(null);
   const [tab, setTab] = useState<'all' | 'dues' | 'payments'>('all');
@@ -197,6 +218,7 @@ export function CustomerDetail({ id }: { id: string }) {
   const [showEdit, setShowEdit] = useState(false);
   const [eLim, setELim] = useState('');
   const [ePhone, setEPhone] = useState('');
+  const [eArea, setEArea] = useState('');
   const [amt, setAmt] = useState('');
   const [method, setMethod] = useState('CASH');
   const [ref, setRef] = useState('');
@@ -228,15 +250,16 @@ export function CustomerDetail({ id }: { id: string }) {
       <PageHead title={c.name} emoji="👤">
         {c.phone && <a className="btn sm" href={`tel:${c.phone}`}>📞 Call</a>}
         {c.phone && <a className="btn sm green" href={waLink(c.phone, reminder)} target="_blank" rel="noreferrer">💬 Remind</a>}
-        <button className="btn sm ghost" onClick={() => { setELim(String(c.creditLimit || '')); setEPhone(c.phone || ''); setShowEdit(true); }}>✏️</button>
+        <button className="btn sm ghost" onClick={() => { setELim(String(c.creditLimit || '')); setEPhone(c.phone || ''); setEArea(c.area || ''); setShowEdit(true); }}>✏️</button>
       </PageHead>
       {c.creditLimit > 0 && <div className={`card`} style={{ borderLeft: `4px solid ${c.totalDue >= c.creditLimit ? 'var(--rose-tx)' : 'var(--gold)'}` }}><small>💳 Credit limit {rs(c.creditLimit)} • available {rs(Math.max(0, c.creditLimit - c.totalDue))}</small></div>}
       {showEdit && (
         <Sheet title={`Edit ${c.name}`} onClose={() => setShowEdit(false)}>
           <label>Phone</label><input value={ePhone} onChange={(e) => setEPhone(e.target.value)} inputMode="tel" />
+          <label>Para / area</label><input value={eArea} onChange={(e) => setEArea(e.target.value)} />
           <label>Credit limit ₹ (0 = unlimited)</label><input value={eLim} onChange={(e) => setELim(e.target.value)} inputMode="numeric" />
           <button className="btn primary block" style={{ marginTop: 12 }} onClick={async () => {
-            try { await api.patch(`/api/customers/${id}`, { phone: ePhone.trim(), creditLimit: Number(eLim || 0) }); toast('Saved ✓', 'ok'); setShowEdit(false); load(); }
+            try { await api.patch(`/api/customers/${id}`, { phone: ePhone.trim(), area: eArea.trim(), creditLimit: Number(eLim || 0) }); toast('Saved ✓', 'ok'); setShowEdit(false); load(); }
             catch (e: any) { toast(errMsg(e), 'err'); }
           }}>✓ Save</button>
         </Sheet>
@@ -250,6 +273,7 @@ export function CustomerDetail({ id }: { id: string }) {
       <div className="btnrow">
         <button className="btn primary big" onClick={() => setShowPay(true)}>💰 Receive payment</button>
         <a className="btn gold" href={`/api/customers/${id}/statement.pdf`} target="_blank" rel="noreferrer">📄 Statement PDF</a>
+        <button className="btn" onClick={() => printDueSlip(c, d.sales)}>🧾 Due slip</button>
       </div>
       <div style={{ marginTop: 10 }}><Seg value={tab} onChange={setTab} options={[{ v: 'all', label: 'All' }, { v: 'dues', label: 'Dues' }, { v: 'payments', label: 'Payments' }]} /></div>
       {(tab === 'all' || tab === 'dues') && (d.sales || []).map((s: any) => (

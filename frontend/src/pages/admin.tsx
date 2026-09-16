@@ -188,8 +188,8 @@ export function Admin() {
         )}
         {dayState?.closed && <button className="btn gold block" style={{ marginTop: 10 }} onClick={() => printSlip(dayState, d?.today)}>🖨️ Print closing slip (80mm)</button>}
       </div>
-      <div className="section-t">📤 Data export & backup</div>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+      <AttendanceCard users={users} />
+      <div className="section-t">📤 Data export & backup</div>      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         {['sales', 'purchases', 'payments', 'products', 'customers'].map((t) => <a key={t} className="btn sm" href={`/api/reports/export/${t}?format=csv`} target="_blank" rel="noreferrer">⬇ {t}</a>)}
         <a className="btn sm gold" href="/api/reports/export/all" target="_blank" rel="noreferrer">💾 Full backup (JSON)</a>
       </div>
@@ -220,8 +220,57 @@ export function Admin() {
   );
 }
 
-export function SystemHealth() {
-  const [h, setH] = useState<any>(null);
+function AttendanceCard({ users }: { users: any[] }) {
+  const toast = useToast();
+  const [rows, setRows] = useState<any[]>([]);
+  const [month, setMonth] = useState(new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }).slice(0, 7));
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+  const load = async (m: string) => {
+    try { const { data } = await api.get('/api/attendance', { params: { month: m } }); setRows(data); } catch (e: any) { toast(errMsg(e), 'err'); }
+  };
+  useEffect(() => { load(month); }, [month]);
+  const todayRows = rows.filter((r) => r.date === today);
+  const mark = async (u: any, kind: 'in' | 'out') => {
+    try {
+      if (kind === 'in') await api.post('/api/attendance/checkin', { userId: u._id, name: u.username });
+      else await api.post('/api/attendance/checkout', { userId: u._id });
+      toast(kind === 'in' ? 'Present ✓' : 'Out ✓', 'ok'); load(month);
+    } catch (e: any) { toast(errMsg(e), 'err'); }
+  };
+  const staff = users.filter((u) => u.role !== 'ADMIN' && u.active);
+  return (
+    <div style={{ marginTop: 6 }}>
+      <div className="section-t">🕘 Hajira (attendance)</div>
+      <div className="card">
+        {staff.length === 0 ? <small style={{ color: 'var(--muted)' }}>Staff add korle ekhane hajira hobe.</small> :
+          staff.map((u) => {
+            const rec = todayRows.find((r) => String(r.userId) === String(u._id));
+            return (
+              <div key={u._id} className="kv">
+                <span><b>{u.username}</b> <small>{rec ? `• in ${rec.inTime || '—'}${rec.outTime ? ` • out ${rec.outTime}` : ''}` : '• not marked'}</small></span>
+                <span style={{ display: 'flex', gap: 6 }}>
+                  {!rec && <button className="btn sm green" onClick={() => mark(u, 'in')}>✓ In</button>}
+                  {rec && !rec.outTime && <button className="btn sm" onClick={() => mark(u, 'out')}>Out</button>}
+                  {rec?.outTime && <span className="badge-ok">done</span>}
+                </span>
+              </div>
+            );
+          })}
+        <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center' }}>
+          <label style={{ margin: 0 }}>Month</label>
+          <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} style={{ maxWidth: 180 }} />
+        </div>
+      </div>
+      {rows.length > 0 && (
+        <div className="table-wrap" style={{ marginTop: 8 }}><table><thead><tr><th>Date</th><th>Name</th><th>In</th><th>Out</th><th>Status</th></tr></thead>
+          <tbody>{rows.slice(0, 60).map((r: any) => <tr key={r._id}><td>{r.date}</td><td>{r.name}</td><td>{r.inTime || '—'}</td><td>{r.outTime || '—'}</td><td>{r.status}</td></tr>)}</tbody>
+        </table></div>
+      )}
+    </div>
+  );
+}
+
+export function SystemHealth() {  const [h, setH] = useState<any>(null);
   useEffect(() => { api.get('/api/system').then((r) => setH(r.data)).catch(() => {}); }, []);
   if (!h) return null;
   return (

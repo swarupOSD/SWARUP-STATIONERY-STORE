@@ -47,6 +47,7 @@ export function Home() {
   const [pricingCt, setPricingCt] = useState(0);
   const [week, setWeek] = useState<any[]>([]);
   const [dayOpen, setDayOpen] = useState<boolean | null>(null);
+  const [overCt, setOverCt] = useState(0);
   const tip = tipOfDay(lang);
   const [err, setErr] = useState('');
   const nav = useNavigate();
@@ -60,6 +61,7 @@ export function Home() {
     const from = fromD.toISOString().slice(0, 10);
     api.get('/api/reports/daily', { params: { from, to } }).then((r) => setWeek(r.data)).catch(() => {});
     api.get(`/api/day/${to}`).then((r) => setDayOpen(!r.data.closed)).catch(() => {});
+    api.get('/api/customers/dues/overdue').then((r) => setOverCt(r.data.filter((x: any) => x.overdue).length)).catch(() => {});
   }, []);
   const hour = new Date().toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit' });
   return (
@@ -127,6 +129,13 @@ export function Home() {
               <span style={{ fontSize: 22 }}>🏷️</span>
               <div className="grow"><b>{pricingCt} new products need sell prices</b><br /><small>Added from bills — set prices to sell at profit</small></div>
               <button className="btn sm gold">Set</button>
+            </div>
+          )}
+          {overCt > 0 && (
+            <div className="alert-row red" style={{ cursor: 'pointer' }} onClick={() => nav('/khata')}>
+              <span style={{ fontSize: 22 }}>⏰</span>
+              <div className="grow"><b>{overCt} takada date par!</b><br /><small>Khata khule taka tolo</small></div>
+              <button className="btn sm gold">Takada</button>
             </div>
           )}
           {(dash.lowItems || []).slice(0, 5).map((p: any) => (
@@ -202,6 +211,7 @@ export function More() {
       <PageHead title="More" emoji="⋯" />
       {item('📦', 'Products', 'Catalog, prices, stock, labels', '/products')}
       {item('🏭', 'Supplier dues', 'Credit bills, pay suppliers', '/suppliers')}
+      {item('📝', 'Estimate', 'Bulk/school order dam', '/estimates')}
       {item('🧮', 'Sales history', 'Bills, returns, voids, receipts', '/sales')}
       {item('🧾', 'Upload bill', 'Invoice scan & import', '/invoices')}
       {item('👛', 'Personal purchases', 'Mine • Father • Mother', '/personal')}

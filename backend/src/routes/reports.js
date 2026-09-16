@@ -19,9 +19,12 @@ async function dailySummary(dateStr) {
   const sales = await Sale.find({ transactionDate: dateStr, status: 'COMPLETED' });
   const payments = await Payment.find({ paymentDate: dateStr });
   const returns = await Return.find({ returnDate: dateStr });
+  const { SupplierPayment } = require('../models/Dues');
   const expenses = await Expense.find({ expenseDate: dateStr });
+  const supplierPayments = await SupplierPayment.find({ paymentDate: dateStr });
   let totalSales = 0, totalCost = 0, discount = 0, cash = 0, upi = 0, bank = 0, dueGiven = 0, itemsSold = 0;
-  const byProduct = new Map(), byHour = new Map(), byMethod = {}, byAccount = {};
+  let cashIn = 0, cashOut = 0;
+  const byProduct = new Map(), byHour = new Map(), byMethod = {}, byAccount = {}, bySeller = {};
   for (const s of sales) {
     totalSales += s.total; discount += s.discount || 0; dueGiven += s.due || 0; itemsSold += s.items.reduce((a, i) => a + i.qty, 0);
     totalCost += s.items.reduce((a, i) => a + (i.lineCost || 0), 0);
@@ -29,11 +32,14 @@ async function dailySummary(dateStr) {
       const m = b.method;
       byMethod[m] = (byMethod[m] || 0) + b.amount;
       if (b.account) byAccount[b.account] = Math.round(((byAccount[b.account] || 0) + b.amount) * 100) / 100;
-      if (['CASH'].includes(m)) cash += b.amount;
+      if (['CASH'].includes(m)) { cash += b.amount; cashIn += b.amount; }
       else if (['UPI','PHONEPE','GPAY','OTHER_UPI'].includes(m)) upi += b.amount;
       else if (['BANK'].includes(m)) bank += b.amount;
     }
-    if (s.paymentMethod === 'CASH' && !(s.paymentBreakdown || []).length) cash += s.paid;
+    if (s.paymentMethod === 'CASH' && !(s.paymentBreakdown || []).length) { cash += s.paid; cashIn += s.paid; }
+    const seller = s.soldBy || 'Ami';
+    bySeller[seller] = bySeller[seller] || { name: seller, bills: 0, total: 0 };
+    bySeller[seller].bills += 1; bySeller[seller].total = Math.round((bySeller[seller].total + s.total) * 100) / 100;
     for (const it of s.items) {
       const e = byProduct.get(String(it.productId)) || { name: it.name, qty: 0, revenue: 0, cost: 0 };
       e.qty += it.qty; e.revenue += it.lineTotal; e.cost += it.lineCost || 0;
@@ -46,9 +52,12 @@ async function dailySummary(dateStr) {
   for (const p of payments) {
     dueCollected += p.amount;
     if (p.account) byAccount[p.account] = Math.round(((byAccount[p.account] || 0) + p.amount) * 100) / 100;
+    if (p.method === 'CASH') cashIn += p.amount;
   }
+  for (const e of expenses) if (e.method === 'CASH') cashOut += e.amount;
+  for (const sp of supplierPayments) if (sp.method === 'CASH') cashOut += sp.amount;
   let returnsTotal = 0, returnsCost = 0, returnsCount = 0;
-  for (const r of returns) { returnsTotal += r.refundTotal || 0; returnsCost += r.refundCost || 0; returnsCount += 1; }
+  for (const r of returns) { returnsTotal += r.refundTotal || 0; returnsCost += r.refundCost || 0; returnsCount += 1; if (r.refundMethod === 'CASH') cashOut += r.refundTotal || 0; }
   totalSales = Math.round((totalSales - returnsTotal) * 100) / 100;
   totalCost = Math.round((totalCost - returnsCost) * 100) / 100;
   const profit = Math.round((totalSales - discount * 0 - totalCost - 0) * 100) / 100 - 0; // profit = revenue - COGS - discount already in total
@@ -65,6 +74,8 @@ async function dailySummary(dateStr) {
     cash: Math.round(cash * 100) / 100, upi: Math.round(upi * 100) / 100, bank: Math.round(bank * 100) / 100,
     dueGiven: Math.round(dueGiven * 100) / 100, dueCollected: Math.round(dueCollected * 100) / 100,
     numSales: sales.length, itemsSold, byMethod, byAccount,
+    bySeller: Object.values(bySeller),
+    drawer: { in: Math.round(cashIn * 100) / 100, out: Math.round(cashOut * 100) / 100, expected: Math.round((cashIn - cashOut) * 100) / 100 },
     byProduct: [...byProduct.values()].map((e) => ({ ...e, profit: Math.round((e.revenue - e.cost) * 100) / 100 })),
     byHour: [...byHour.entries()].sort().map(([h, v]) => ({ hour: h, total: Math.round(v * 100) / 100 })),
   };

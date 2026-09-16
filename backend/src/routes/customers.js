@@ -13,11 +13,12 @@ router.use(auth);
 
 router.get('/', async (req, res, next) => {
   try {
-    const { q = '', filter = 'all', page = '1', limit = '50' } = req.query;
+    const { q = '', filter = 'all', area = '', page = '1', limit = '50' } = req.query;
     const f = {};
     if (q) f.$or = [{ name: new RegExp(String(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') }, { phone: new RegExp(String(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') }];
     if (filter === 'due') f.totalDue = { $gt: 0 };
     if (filter === 'paid') f.totalDue = { $lte: 0 };
+    if (area) f.area = area;
     const pg = Math.max(1, parseInt(page, 10) || 1), lim = Math.min(100, parseInt(limit, 10) || 50);
     const [items, total] = await Promise.all([Customer.find(f).sort({ totalDue: -1, name: 1 }).skip((pg - 1) * lim).limit(lim), Customer.countDocuments(f)]);
     res.json({ items, total, page: pg, limit: lim });
@@ -26,9 +27,9 @@ router.get('/', async (req, res, next) => {
 
 router.post('/', requirePerm('customers.create'), async (req, res, next) => {
   try {
-    const { name, phone = '', address = '', notes = '', creditLimit = 0 } = req.body;
+    const { name, phone = '', address = '', area = '', notes = '', creditLimit = 0 } = req.body;
     if (!name) return res.status(400).json({ error: 'Customer name is required.' });
-    const c = await Customer.create({ name: String(name).trim(), phone, address, notes, creditLimit: Math.max(0, Number(creditLimit || 0)) });
+    const c = await Customer.create({ name: String(name).trim(), phone, address, area: String(area || '').trim(), notes, creditLimit: Math.max(0, Number(creditLimit || 0)) });
     await audit(req.user, 'CUSTOMER_CREATED', 'customer', c._id, { name: c.name });
     res.status(201).json(c);
   } catch (e) { next(e); }
@@ -38,12 +39,17 @@ router.patch('/:id', requirePerm('customers.create'), async (req, res, next) => 
   try {
     const c = await Customer.findById(req.params.id);
     if (!c) return res.status(404).json({ error: 'Customer not found.' });
-    for (const k of ['name', 'phone', 'address', 'notes']) if (req.body[k] !== undefined) c[k] = req.body[k];
+    for (const k of ['name', 'phone', 'address', 'area', 'notes']) if (req.body[k] !== undefined) c[k] = req.body[k];
     if (req.body.creditLimit !== undefined) c.creditLimit = Math.max(0, Number(req.body.creditLimit || 0));
     await c.save();
     await audit(req.user, 'CUSTOMER_UPDATED', 'customer', c._id, { name: c.name });
     res.json(c);
   } catch (e) { next(e); }
+});
+
+// Distinct areas for route-wise collection filter.
+router.get('/meta/areas', async (req, res, next) => {
+  try { res.json(await Customer.distinct('area', { area: { $ne: '' } })); } catch (e) { next(e); }
 });
 
 // Takada list: due bills past their promised date, grouped by customer.

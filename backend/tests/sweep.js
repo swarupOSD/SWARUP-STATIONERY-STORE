@@ -216,7 +216,25 @@ async function check(name, fn) {
       const dz = await call('GET', '/api/reports/dead-stock?days=30');
       assert.equal(dz.status, 200); assert.ok('items' in dz.data);
       const bk = await call('GET', '/api/reports/export/all');
-      assert.equal(bk.status, 200); assert.ok(Array.isArray(bk.data.products) && Array.isArray(bk.data.sales));
+      assert.equal(bk.status, 200);       assert.ok(Array.isArray(bk.data.products) && Array.isArray(bk.data.sales));
+    });
+    await check('estimates + attendance + area + drawer', async () => {
+      const e = await call('POST', '/api/estimates', { customerName: 'Sweep School', items: [{ productId: global.__pid, qty: 5 }] });
+      assert.equal(e.status, 201); assert.ok(e.data.total > 0);
+      const st = await call('PATCH', `/api/estimates/${e.data._id}`, { status: 'CONVERTED' });
+      assert.equal(st.status, 200);
+      const staff = await call('POST', '/api/users', { username: 'sweepstaff', password: 'x123456', role: 'STAFF' });
+      assert.equal(staff.status, 201);
+      const ci = await call('POST', '/api/attendance/checkin', { userId: staff.data.id || staff.data._id, name: 'sweepstaff' });
+      assert.equal(ci.status, 201);
+      const co = await call('POST', '/api/attendance/checkout', { userId: staff.data.id || staff.data._id });
+      assert.equal(co.status, 200); assert.ok(co.data.outTime);
+      const au = await call('GET', '/api/attendance?date=' + new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }));
+      assert.equal(au.status, 200);
+      const areas = await call('GET', '/api/customers/meta/areas');
+      assert.equal(areas.status, 200);
+      const rep = await call('GET', '/api/reports/today');
+      assert.ok(rep.data.drawer && Array.isArray(rep.data.bySeller), 'drawer+seller in report');
     });
     await check('expenses + net profit + buy list', async () => {      const bad = await call('POST', '/api/expenses', { title: '', amount: 0 });
       assert.equal(bad.status, 400);

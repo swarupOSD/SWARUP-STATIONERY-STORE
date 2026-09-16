@@ -7,6 +7,7 @@ import { Purchase, Khata, CustomerDetail } from './pages/shop';
 import { Products, ProductForm } from './pages/products';
 import { Reports, Invoices, Personal, SalesHistory } from './pages/rest';
 import { Suppliers } from './pages/suppliers';
+import { Estimates } from './pages/estimates';
 import { Expenses } from './pages/expenses';
 import { BuyList } from './pages/buy';
 import { SettingsPage, Admin } from './pages/admin';
@@ -47,6 +48,7 @@ export default function App() {
                   <Route path="/personal" element={<Guard el={<Personal />} />} />
                   <Route path="/sales" element={<Guard el={<SalesHistory />} />} />
               <Route path="/suppliers" element={<Guard el={<Suppliers />} />} />
+              <Route path="/estimates" element={<Guard el={<Estimates />} />} />
               <Route path="/expenses" element={<Guard el={<Expenses />} />} />
               <Route path="/buy-list" element={<Guard el={<BuyList />} />} />
                   <Route path="/settings" element={<Guard el={<SettingsPage />} />} />

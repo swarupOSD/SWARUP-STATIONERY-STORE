@@ -63,6 +63,18 @@ export function Reports() {
           <div className="card"><b style={{ fontSize: 14 }}>💳 Payment split</b>
             <SplitBar parts={[{ label: 'Cash', value: d.cash, color: '#1e7e34' }, { label: 'UPI', value: d.upi, color: '#175cd3' }, { label: 'Bank', value: d.bank, color: '#b8860b' }, { label: 'Due', value: d.dueGiven, color: '#8f1d26' }]} />
           </div>
+          <div className="row2" style={{ marginTop: 10 }}>
+            <div className="card"><b style={{ fontSize: 14 }}>🧑‍🌾 Ke bechlo</b>
+              {(d.bySeller || []).length === 0 ? <div><small style={{ color: 'var(--muted)' }}>No sales.</small></div> :
+                (d.bySeller || []).map((s: any) => <div key={s.name} className="kv"><span>{s.name === 'Ami' ? '🙋 Ami' : s.name === 'Ma' ? '👩 Ma' : '👨 Baba'}</span><span><b>{rs(s.total)}</b> <small>• {s.bills} bills</small></span></div>)}
+            </div>
+            <div className="card"><b style={{ fontSize: 14 }}>🗄️ Drawer (cash hiss)</b>
+              <div className="kv"><span>Cash in</span><b style={{ color: 'var(--green)' }}>+{rs(d.drawer?.in || 0)}</b></div>
+              <div className="kv"><span>Cash out</span><b style={{ color: 'var(--rose-tx)' }}>−{rs(d.drawer?.out || 0)}</b></div>
+              <div className="kv"><span>Drawer-e thaka uchit</span><b>{rs(d.drawer?.expected || 0)}</b></div>
+              <small style={{ color: 'var(--muted)' }}>Sale cash + aday MINUS kharcha, supplier pay, return. Tally-r sathe miliye dekho.</small>
+            </div>
+          </div>
           {d.byAccount && Object.keys(d.byAccount).length > 0 && (
             <div className="card" style={{ marginTop: 10 }}><b style={{ fontSize: 14 }}>👛 Kar kache taka gelo</b>
               {Object.entries(d.byAccount).map(([a, v]: any) => <div key={a} className="kv"><span>{a}</span><b>{rs(v)}</b></div>)}

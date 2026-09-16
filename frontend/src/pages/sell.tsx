@@ -47,6 +47,21 @@ export function Sell() {
   useEffect(() => { localStorage.setItem('cart', JSON.stringify(cart)); }, [cart]);
   useEffect(() => { api.get('/api/categories').then((r) => setCats(r.data)).catch(() => {}); }, []);
   useEffect(() => {
+    try {
+      const raw = localStorage.getItem('estimate-convert');
+      if (raw) {
+        const conv = JSON.parse(raw);
+        localStorage.removeItem('estimate-convert');
+        if (conv?.items?.length) {
+          setCart(conv.items);
+          if (conv.customerName) setNewCust(conv.customerName);
+          if (conv.discount) setDisc(String(conv.discount));
+          toast(`Estimate loaded: ${conv.items.length} items — dam miliye nin`, 'ok');
+        }
+      }
+    } catch {}
+  }, []);
+  useEffect(() => {
     setLoading(true);
     api.get('/api/products', { params: { q: dq, category: cat, limit: 60 } })
       .then((r) => setItems(r.data.items)).catch((e) => toast(errMsg(e), 'err')).finally(() => setLoading(false));
